@@ -1,5 +1,5 @@
-import { mkdir, readFile, rm } from "node:fs/promises";
-import { basename, join, relative, resolve } from "node:path";
+import { mkdir, readFile, realpath, rm } from "node:fs/promises";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { EventLedger } from "./ledger.js";
 import { assertContained, assertSafeRelativePath, copyEntry, fingerprintPath, fingerprintsEqual, pathExists, toPosixPath, writeJsonAtomic } from "./fs.js";
 import { findRepository, runGit, splitNull } from "./git.js";
@@ -153,8 +153,11 @@ export async function createTransaction(
 ): Promise<TransactionMetadata> {
   const repositoryRoot = await findRepository(cwd);
   const baseHead = await validateRepository(repositoryRoot);
-  const invocationRelative = relative(repositoryRoot, resolve(cwd));
-  if (invocationRelative.startsWith("..")) throw new Error("Invocation path is outside the repository.");
+  const invocationPath = await realpath(resolve(cwd));
+  const invocationRelative = relative(repositoryRoot, invocationPath);
+  if (invocationRelative.startsWith("..") || isAbsolute(invocationRelative)) {
+    throw new Error("Invocation path is outside the repository.");
+  }
   const transactionId = createTransactionId();
   await ensureStore();
   const directory = transactionDirectory(transactionId);

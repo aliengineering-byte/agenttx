@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { realpath } from "node:fs/promises";
 import { promisify } from "node:util";
 import { delimiter } from "node:path";
 
@@ -35,7 +36,7 @@ export async function findRepository(cwd: string): Promise<string> {
   const result = await runGit(cwd, ["rev-parse", "--show-toplevel"], { allowFailure: true });
   const root = result.stdout.trim();
   if (!root) throw new Error("AgentTX V0 currently requires a Git repository.");
-  return root;
+  return realpath(root);
 }
 
 export function splitNull(value: string): string[] {

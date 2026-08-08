@@ -1,4 +1,5 @@
-import { readFile, readlink, rename, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readlink, rename, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { commitTransaction, inspectDiff, recoverInterruptedTransactions, rollbackTransaction } from "../../src/core/workspace.js";
@@ -28,6 +29,19 @@ describe("Git transaction workspace", () => {
     expect(await text(join(repository, "a.txt"))).toBe("before-a\n");
     expect(await text(join(repository, "delete.txt"))).toBe("keep me\n");
     expect((await git(repository, ["status", "--porcelain"])).trim()).toBe("");
+  });
+
+  it.skipIf(process.platform === "win32")("canonicalizes a symlinked repository invocation path", async () => {
+    const repository = await createRepository({ "a.txt": "before\n" });
+    const aliasDirectory = await mkdtemp(join(tmpdir(), "agenttx-test-alias-"));
+    const alias = join(aliasDirectory, "repository");
+    await symlink(repository, alias, "dir");
+    const metadata = await runNodeTransaction(alias, `require('node:fs').writeFileSync('a.txt','agent\\n')`);
+    expect((await inspectDiff(metadata)).files).toEqual([
+      expect.objectContaining({ path: "a.txt", kind: "modified" })
+    ]);
+    await rollbackTransaction(metadata);
+    expect(await text(join(repository, "a.txt"))).toBe("before\n");
   });
 
   it("commits transaction changes while preserving unrelated concurrent edits", async () => {
