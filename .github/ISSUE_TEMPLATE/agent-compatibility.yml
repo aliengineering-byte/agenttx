@@ -1,0 +1,65 @@
+name: Agent compatibility report
+description: Report a working or broken agent CLI workflow
+title: "[Compatibility]: "
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: "Remove secrets before submitting logs. Do not include prompts, proprietary code, credentials, or private paths."
+  - type: input
+    id: agent
+    attributes:
+      label: Agent name and version
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+    validations:
+      required: true
+  - type: input
+    id: git
+    attributes:
+      label: Git version
+    validations:
+      required: true
+  - type: input
+    id: agenttx
+    attributes:
+      label: AgentTX version
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command used
+      placeholder: "agenttx run <agent>"
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Cover terminal launch, workspace edits, original-tree state, exit, REVIEW, diff, and rollback when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Disclosure check
+      options:
+        - label: I removed secrets and private data from this report.
+          required: true

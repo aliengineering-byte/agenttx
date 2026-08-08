@@ -76,7 +76,7 @@ Usage:
   agenttx replay <transaction-id> [--json]
   agenttx report [transaction-id] --html [--output path]
   agenttx doctor [--json]
-  agenttx demo
+  agenttx demo [--keep]
 
 External writes detected by top-level matching or PATH shims are blocked by default.
 Detection is heuristic; AgentTX V0 is not an OS security sandbox.`;
@@ -203,26 +203,42 @@ async function handleDoctor(args: string[]): Promise<void> {
   if (!report.ok) process.exitCode = 1;
 }
 
-async function handleDemo(): Promise<void> {
+async function handleDemo(args: string[]): Promise<void> {
   const repository = await mkdtemp(join(tmpdir(), "agenttx-demo-"));
   await mkdir(join(repository, "src"), { recursive: true });
+  await mkdir(join(repository, ".github", "workflows"), { recursive: true });
   await writeFile(join(repository, "package.json"), `${JSON.stringify({ name: "agenttx-demo", version: "1.0.0", type: "module", scripts: { test: "node --test" } }, null, 2)}\n`);
-  await writeFile(join(repository, "src", "math.js"), "export const add = (left, right) => left + right;\n");
+  await writeFile(join(repository, "package-lock.json"), `${JSON.stringify({ name: "agenttx-demo", version: "1.0.0", lockfileVersion: 3, requires: true, packages: { "": { name: "agenttx-demo", version: "1.0.0" } } }, null, 2)}\n`);
+  await writeFile(join(repository, "src", "auth.ts"), "export function authenticate() {\n  return true;\n}\n");
+  await writeFile(join(repository, "src", "legacy.ts"), "export const legacySession = true;\n");
+  await writeFile(join(repository, ".github", "workflows", "ci.yml"), "name: CI\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n");
   await writeFile(join(repository, "README.md"), "# AgentTX deterministic demo\n");
   await execFileAsync("git", ["-C", repository, "init", "-q"]);
   await execFileAsync("git", ["-C", repository, "add", "-A"]);
   await execFileAsync("git", ["-C", repository, "-c", "user.name=AgentTX Demo", "-c", "user.email=demo@agenttx.local", "commit", "-q", "-m", "demo baseline"]);
   const command: CommandSpec = { command: process.execPath, args: [join(packageRoot, "scripts", "fake-agent.mjs")] };
   const metadata = await createTransaction(repository, command, { allowExternal: false, agent: "demo-agent" });
-  print("Running deterministic fake coding agent…\n");
+  print("Starting demo transaction...\n");
   const result = await runTransaction(metadata, cliPath, command);
   const inspection = await inspectTransaction(result.metadata);
   print(renderTransactionReport(inspection));
-  print("\nDemo transaction remains in REVIEW. Try:");
-  print(`  agenttx diff ${metadata.transactionId} --full`);
-  print(`  agenttx inspect ${metadata.transactionId}`);
-  print(`  agenttx rollback ${metadata.transactionId}`);
-  print(`\nOriginal demo repository: ${repository}`);
+  print("\nDIFF");
+  print(renderDiffSummary(inspection.diff));
+  if (hasFlag(args, "--keep")) {
+    print("\nDemo transaction remains in REVIEW. Try:");
+    print(`  agenttx diff ${metadata.transactionId} --full`);
+    print(`  agenttx inspect ${metadata.transactionId}`);
+    print(`  agenttx rollback ${metadata.transactionId}`);
+    print(`\nOriginal demo repository: ${repository}`);
+    return;
+  }
+  const rolledBack = await rollbackTransaction(result.metadata);
+  const originalStatus = (await execFileAsync("git", ["-C", repository, "status", "--porcelain"])).stdout.trim();
+  print("\nROLLBACK");
+  print("  ✓ Transaction rolled back");
+  print(`  ✓ ${rolledBack.diff.filesChanged} transaction changes discarded`);
+  print(`  ${originalStatus ? "✗" : "✓"} Original workspace unchanged`);
+  if (originalStatus) throw new Error("Demo verification failed: original repository is not clean after rollback.");
 }
 
 async function main(): Promise<void> {
@@ -252,7 +268,7 @@ async function main(): Promise<void> {
     case "replay": await handleReplay(args); break;
     case "report": await handleReport(args); break;
     case "doctor": await handleDoctor(args); break;
-    case "demo": await handleDemo(); break;
+    case "demo": await handleDemo(args); break;
     case "--version":
     case "-v": print("0.1.0"); break;
     case "help":

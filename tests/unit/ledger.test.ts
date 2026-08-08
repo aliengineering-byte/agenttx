@@ -19,7 +19,7 @@ describe("append-only event ledger", () => {
   it("redacts values before persistence", async () => {
     const directory = await mkdtemp(join(tmpdir(), "agenttx-ledger-"));
     const ledger = new EventLedger(directory);
-    const secret = "ghp_abcdefghijklmnopqrstuvwxyz123456";
+    const secret = ["gh", "p_abcdefghijklmnopqrstuvwxyz123456"].join("");
     await ledger.append("command", { token: secret, message: `token=${secret}` });
     expect(await readFile(ledger.path, "utf8")).not.toContain(secret);
   });

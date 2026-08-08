@@ -1,0 +1,48 @@
+name: Bug report
+description: Report incorrect AgentTX behavior
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Remove secrets, private paths, prompts, and proprietary code before submitting logs."
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Include what AgentTX changed, preserved, or refused.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: AgentTX version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, Node version, and Git version
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Use a disposable repository and redact all sensitive data.
+    validations:
+      required: true
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Disclosure check
+      options:
+        - label: I removed secrets and private data from this report.
+          required: true

@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose a focused improvement to the transaction workflow
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Developer problem
+      description: Describe the workflow problem, not only the desired implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: transaction
+    attributes:
+      label: Transaction semantics
+      description: What can be observed, inspected, accepted, rolled back, or compensated?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Usage evidence
+      description: How often does this occur and what workaround do you use today?
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This request does not assume AgentTX is an OS security boundary.
+          required: true

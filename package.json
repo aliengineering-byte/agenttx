@@ -1,7 +1,7 @@
 {
   "name": "agenttx",
   "version": "0.1.0",
-  "description": "Open-source transaction layer for AI coding agents",
+  "description": "Git-style transactions for AI coding agents. Inspect, commit, or roll back agent changes.",
   "type": "module",
   "bin": {
     "agenttx": "./dist/src/cli.js"
@@ -30,33 +30,34 @@
     "test": "tsc -p tsconfig.build.json && vitest run",
     "test:coverage": "tsc -p tsconfig.build.json && vitest run --coverage",
     "demo": "node dist/src/cli.js demo",
+    "demo:keep": "node dist/src/cli.js demo --keep",
     "benchmark": "node dist/benchmarks/workspace.js",
+    "benchmark:quick": "node dist/benchmarks/workspace.js 100",
+    "scan:secrets": "node scripts/secret-scan.mjs",
+    "check:links": "node scripts/check-links.mjs",
+    "release:verify": "node scripts/release-verify.mjs",
     "prepack": "tsc -p tsconfig.build.json"
   },
   "engines": {
     "node": ">=20"
   },
   "keywords": [
-    "ai-agents",
-    "transactions",
+    "ai",
+    "agent",
+    "coding-agent",
+    "claude-code",
+    "codex",
+    "developer-tools",
+    "git",
     "rollback",
-    "coding-agents",
-    "sandbox",
-    "git"
+    "transactions",
+    "agent-safety",
+    "agent-reliability"
   ],
   "author": "AgentTX contributors",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/agenttx/agenttx.git"
-  },
-  "bugs": {
-    "url": "https://github.com/agenttx/agenttx/issues"
-  },
-  "homepage": "https://github.com/agenttx/agenttx#readme",
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

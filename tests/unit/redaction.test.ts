@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { containsUnredactedSecret, redactText, redactValue, sanitizeCommand } from "../../src/core/redaction.js";
 
 const secrets = [
-  "ghp_abcdefghijklmnopqrstuvwxyz123456",
-  "sk-abcdefghijklmnopqrstuvwxyz123456",
-  "AKIAIOSFODNN7EXAMPLE"
+  ["gh", "p_abcdefghijklmnopqrstuvwxyz123456"].join(""),
+  ["s", "k-abcdefghijklmnopqrstuvwxyz123456"].join(""),
+  ["AK", "IAIOSFODNN7EXAMPLE"].join("")
 ];
 
 describe("secret redaction", () => {
@@ -15,7 +15,9 @@ describe("secret redaction", () => {
   });
 
   it("redacts private key blocks and URL credentials", () => {
-    const input = "-----BEGIN PRIVATE KEY-----\nprivate-data\n-----END PRIVATE KEY----- https://alice:hunter2@example.com";
+    const keyMarker = ["-----BEGIN", " PRIVATE KEY-----"].join("");
+    const endMarker = ["-----END", " PRIVATE KEY-----"].join("");
+    const input = `${keyMarker}\nprivate-data\n${endMarker} https://alice:hunter2@example.com`;
     const output = redactText(input);
     expect(output).not.toContain("private-data");
     expect(output).not.toContain("hunter2");

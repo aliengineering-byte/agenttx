@@ -49,7 +49,7 @@ describe("Git transaction workspace", () => {
     const repository = await createRepository({ "a.txt": "a0\n", "b.txt": "b0\n" });
     const metadata = await runNodeTransaction(repository, `const fs=require('node:fs');fs.writeFileSync('a.txt','agent\\n');fs.writeFileSync('b.txt','agent-b\\n')`);
     await writeFile(join(repository, "a.txt"), "user\n");
-    await expect(commitTransaction(metadata)).rejects.toThrow(/Commit stopped/);
+    await expect(commitTransaction(metadata)).rejects.toThrow(/could not accept this transaction/);
     expect(await text(join(repository, "a.txt"))).toBe("user\n");
     expect(await text(join(repository, "b.txt"))).toBe("b0\n");
   });

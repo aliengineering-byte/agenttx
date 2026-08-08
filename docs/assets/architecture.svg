@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" role="img" aria-labelledby="title description">
+  <title id="title">AgentTX V0 architecture</title>
+  <desc id="description">The CLI coordinates an isolated repository workspace, event and inspection artifacts, verification, and conflict-safe commit or rollback.</desc>
+  <rect width="1200" height="620" fill="#ffffff"/>
+  <style>.box{fill:#f6f8fa;stroke:#1f2328;stroke-width:2}.accent{fill:#eaf7ee;stroke:#1a7f37;stroke-width:2}.t{font:700 22px ui-monospace,SFMono-Regular,Consolas,monospace;fill:#1f2328}.s{font:16px ui-monospace,SFMono-Regular,Consolas,monospace;fill:#59636e}.a{stroke:#59636e;stroke-width:2;fill:none;marker-end:url(#arrow)}</style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#59636e"/></marker></defs>
+  <text x="600" y="46" text-anchor="middle" class="t">AgentTX V0 · local repository transaction</text>
+  <rect class="box" x="50" y="100" width="250" height="130" rx="12"/><text class="t" x="175" y="146" text-anchor="middle">Original repo</text><text class="s" x="175" y="180" text-anchor="middle">available throughout</text><text class="s" x="175" y="208" text-anchor="middle">working tree + index</text>
+  <rect class="accent" x="470" y="90" width="270" height="150" rx="12"/><text class="t" x="605" y="138" text-anchor="middle">Transaction</text><text class="s" x="605" y="174" text-anchor="middle">independent no-hardlink clone</text><text class="s" x="605" y="202" text-anchor="middle">dirty baseline overlay</text><text class="s" x="605" y="230" text-anchor="middle">agent child process</text>
+  <rect class="box" x="900" y="100" width="250" height="130" rx="12"/><text class="t" x="1025" y="146" text-anchor="middle">Local store</text><text class="s" x="1025" y="180" text-anchor="middle">metadata + hash ledger</text><text class="s" x="1025" y="208" text-anchor="middle">diff + risk + reports</text>
+  <path class="a" d="M300 165 H460"/><path class="a" d="M740 165 H890"/>
+  <rect class="box" x="270" y="340" width="260" height="130" rx="12"/><text class="t" x="400" y="388" text-anchor="middle">Inspect + verify</text><text class="s" x="400" y="424" text-anchor="middle">human or JSON decision</text><text class="s" x="400" y="452" text-anchor="middle">explicit check execution</text>
+  <rect class="accent" x="670" y="340" width="260" height="130" rx="12"/><text class="t" x="800" y="388" text-anchor="middle">Accept / rollback</text><text class="s" x="800" y="424" text-anchor="middle">conflict-safe file apply</text><text class="s" x="800" y="452" text-anchor="middle">or remove isolated clone</text>
+  <path class="a" d="M605 240 V300 H400 V330"/><path class="a" d="M530 405 H660"/><path class="a" d="M800 340 V300 H175 V240"/>
+  <text class="s" x="600" y="558" text-anchor="middle">Repository isolation is real. Command interception is heuristic and is not an OS security boundary.</text>
+</svg>

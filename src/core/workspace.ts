@@ -411,7 +411,7 @@ export async function commitTransaction(metadata: TransactionMetadata): Promise<
   const conflicts = await compareOriginalToBaseline(metadata, diff, before);
   if (conflicts.length) {
     throw new Error(
-      `Commit stopped: ${conflicts.length} transaction path${conflicts.length === 1 ? " has" : "s have"} changed in the original workspace:\n${conflicts.map((path) => `  ${path}`).join("\n")}\nNo files were applied.`
+      `AgentTX could not accept this transaction because the original workspace changed while the agent was running.\n\nChanged outside AgentTX:\n${conflicts.map((path) => `  ${path}`).join("\n")}\n\nYour existing work was not overwritten. No transaction files were applied.\n\nNext:\n  agenttx diff ${metadata.transactionId}\n  agenttx rollback ${metadata.transactionId}`
     );
   }
   const paths = changedPaths(diff);

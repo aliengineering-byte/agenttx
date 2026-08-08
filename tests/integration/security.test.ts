@@ -45,7 +45,7 @@ describe("side-effect gating and privacy", () => {
 
   it("never persists or renders a raw token", async () => {
     const repository = await createRepository();
-    const token = "ghp_abcdefghijklmnopqrstuvwxyz123456";
+    const token = ["gh", "p_abcdefghijklmnopqrstuvwxyz123456"].join("");
     const source = `require('node:fs').writeFileSync('.env','GITHUB_TOKEN=${token}\\n')`;
     const command: CommandSpec = { command: process.execPath, args: ["--token", token, "-e", source] };
     const created = await createTransaction(repository, command, { allowExternal: false, agent: "test" });
@@ -71,7 +71,7 @@ describe("side-effect gating and privacy", () => {
     const command: CommandSpec = { command: process.execPath, args: ["-e", "process.exit(0)"] };
     const created = await createTransaction(repository, command, { allowExternal: false, agent: "test" });
     const ledger = new EventLedger(created.transactionDirectory);
-    const token = "sk-abcdefghijklmnopqrstuvwxyz123456";
+    const token = ["s", "k-abcdefghijklmnopqrstuvwxyz123456"].join("");
     await ledger.append("debug", { error: `request failed token=${token}` });
     expect(await readFile(ledger.path, "utf8")).not.toContain(token);
   });

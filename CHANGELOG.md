@@ -17,3 +17,12 @@ All notable changes to AgentTX are documented here. The project follows Semantic
 - Secret-bearing path detection and recursive value redaction.
 - Deterministic risk scoring and opt-in project verification.
 - Deterministic offline demo and cross-platform CI definition.
+- Release verifier covering clean rollback, dirty-repository acceptance, and concurrent-change refusal from the packed package.
+- Scaled 100/1,000/10,000-file benchmark harness and documented launch measurements.
+- Repository, agent, and storage diagnostics in `agenttx doctor`.
+- Public launch documentation, safe examples, issue templates, and deterministic SVG demo assets.
+
+### Fixed
+
+- Ledger lock acquisition now tolerates another writer releasing the lock between inspection and stale-lock recovery.
+- Concurrent acceptance errors explicitly state that existing work was not overwritten and provide next commands.

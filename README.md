@@ -2,277 +2,121 @@
 
 **Make AI agents undoable.**
 
-> The transaction layer for AI coding agents.
+Run AI coding agents inside isolated Git transactions.
+
+Inspect everything they changed. Commit the good. Roll back the bad.
 
 ```bash
 npx agenttx run claude
 ```
 
-Let the agent work. Inspect everything it changed. Commit the good. Roll back the bad.
+![AgentTX deterministic demo: seven changes, a blocked push, high risk, and a verified rollback](docs/assets/agenttx-demo.svg)
 
-AgentTX is not an AI agent. It is the local control layer around agents.
+✓ isolated repository workspace · ✓ full diff · ✓ rollback · ✓ conflict detection · ✓ transaction history · ✓ risk inspection · ✓ secret redaction · ✓ no cloud required
 
-```text
-╭──────────────────────────────────────────╮
-│ AgentTX Transaction                      │
-│ atx_20260808_153522_a81f                 │
-╰──────────────────────────────────────────╯
+## Quick start
 
-Changes
-  12 files
-  +482 / -191
-
-Side Effects
-  🛑 git push can modify a remote repository [BLOCKED]
-
-Risk
-  HIGH (8)
-
-Next
-  agenttx diff
-  agenttx inspect
-  agenttx commit
-  agenttx rollback
-```
-
-- ✓ independent Git workspace
-- ✓ dirty-repository baselines
-- ✓ readable and machine-readable inspection
-- ✓ heuristic risky-side-effect gates
-- ✓ append-only event ledger
-- ✓ conflict-safe acceptance
-- ✓ rollback without modifying the original workspace
-- ✓ no telemetry, accounts, API keys, Docker, or cloud service
-
-## Five-second demo
+AgentTX requires Node.js 20+ and Git. Start from a Git repository with at least one commit.
 
 ```bash
-git clone https://github.com/agenttx/agenttx.git
-cd agenttx
-npm install
-npm run build
-npm run demo
+npx agenttx doctor
+npx agenttx run <your-agent-command>
+npx agenttx inspect
 ```
 
-The demo uses a deterministic fake coding agent. It changes four files, adds a dependency-like entry, attempts `git push`, and leaves a real transaction in `REVIEW`. It needs no model API or credentials.
+Then accept the transaction-relative file changes:
 
 ```bash
-agenttx diff <transaction-id> --full
-agenttx inspect <transaction-id>
-agenttx rollback <transaction-id>
+npx agenttx commit
 ```
 
-## Install
-
-AgentTX requires Node.js 20 or newer and Git.
+Or discard them without changing your original working tree:
 
 ```bash
-npm install --global agenttx
-# or
-npx agenttx run codex
+npx agenttx rollback
 ```
 
-The npm package name was available when V0 was prepared. This repository is versioned as `0.1.0`; publishing is a separate release action.
+Try the real, deterministic, credential-free demo after installing AgentTX:
 
-## Use
+```bash
+agenttx demo
+```
 
-Run any executable from inside a Git repository:
+## Why AgentTX?
+
+Coding agents can now change source, dependencies, CI, and Git state across an entire repository. Git helps after changes reach your working tree, while permission prompts answer only whether an action may run. AgentTX gives each session a transaction boundary: work happens elsewhere, the result is inspectable, and acceptance is explicit. If the result is wrong, rollback removes the isolated workspace. Your original repository remains available throughout.
+
+## How it works
+
+![AgentTX transaction flow from original repository to isolated agent workspace, inspection, and commit or rollback](docs/assets/transaction-flow.svg)
+
+AgentTX captures the repository baseline, builds an independent local clone, overlays tracked and non-ignored untracked changes, and runs the child from the matching directory. When the child exits, the transaction enters `REVIEW`. Acceptance first checks every touched path against its start-time fingerprint; overlapping user changes stop the operation before any transaction file is applied.
+
+`agenttx commit` accepts files into the original working tree. It does **not** create or stage a Git commit.
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `agenttx run [--allow-external] [--] <command...>` | Run any command in a new transaction |
+| `agenttx status [id] [--json]` | Show transaction state |
+| `agenttx diff [id] [--stat\|--full]` | Review changed files or the redacted patch |
+| `agenttx inspect [id] [--json]` | Show changes, side effects, risk, and checks |
+| `agenttx verify [id] [--run]` | Discover checks; run them only with `--run` |
+| `agenttx commit [id]` | Accept transaction files after conflict checks |
+| `agenttx rollback [id]` | Discard the isolated transaction |
+| `agenttx history [--json]` | List local transaction history |
+| `agenttx replay <id> [--json]` | Read recorded events; it does not re-execute |
+| `agenttx report [id] --html` | Write a standalone redacted HTML report |
+| `agenttx doctor [--json]` | Check Node, Git, repository state, storage, and agent CLIs |
+| `agenttx demo [--keep]` | Run the offline seven-file demo |
+
+Machine consumers can use `status --json` and `inspect --json`. Their versioned examples are in [the schema reference](docs/SCHEMAS.md).
+
+## Works around the agent, not instead of it
+
+The durable interface is arbitrary command wrapping:
 
 ```bash
 agenttx run claude
 agenttx run codex
 agenttx run gemini
 agenttx run opencode
-agenttx run npm test
-agenttx run bash
+agenttx run -- node scripts/my-local-agent.mjs
 ```
 
-AgentTX passes the parent terminal through to the child, including stdin, stdout, stderr, and terminal capabilities. The child runs from the equivalent directory inside the isolated transaction workspace.
+Named adapters identify common CLIs; they do not depend on private agent hooks. Availability and interactive behavior still depend on the installed tool and platform. See [agent compatibility](docs/AGENT_COMPATIBILITY.md) for the distinction between generic support and explicit smoke tests.
 
-After the process exits:
+## Safety model
 
-```bash
-agenttx status [transaction-id]
-agenttx diff [transaction-id]
-agenttx diff [transaction-id] --full
-agenttx inspect [transaction-id]
-agenttx inspect [transaction-id] --json
-agenttx verify [transaction-id]
-agenttx verify [transaction-id] --run
-agenttx report [transaction-id] --html
-agenttx commit [transaction-id]
-agenttx rollback [transaction-id]
-agenttx history
-agenttx replay <transaction-id>
-agenttx doctor
-```
+AgentTX gives a strong, narrow repository guarantee: before acceptance, rollback removes only the isolated transaction workspace; acceptance refuses overlapping changes in the original repository and restores from a recovery backup if file application fails.
 
-`commit` means “accept these transaction files into the original working tree.” It does **not** create a Git commit or stage files.
+AgentTX is **not an OS security boundary**. The child retains your normal user permissions and can reach files outside the transaction repository. Selected external commands are detected and gated through top-level matching and best-effort `PATH` shims, which absolute binaries, renamed tools, libraries, in-process network calls, or other routes can bypass. `--allow-external` permits detected actions but does not make them reversible.
 
-`replay` prints recorded events. V0 does **not** claim deterministic re-execution.
+No telemetry, account, API key, Docker daemon, or cloud service is required. AgentTX does not upload code, paths, prompts, commands, diffs, or transaction metadata.
 
-### External actions
+Read [SECURITY.md](SECURITY.md), [the exact security model](docs/SECURITY_MODEL.md), and [the threat model](docs/THREAT_MODEL.md) before relying on AgentTX around untrusted code.
 
-AgentTX inserts best-effort wrappers for common commands such as `git`, `gh`, `curl`, `npm`, `docker`, `terraform`, `kubectl`, and cloud CLIs. Recognized external writes are blocked by default.
+## Honest V0 limitations
 
-```bash
-agenttx run --allow-external -- gh pr create
-```
+- Requires a non-bare Git repository with at least one commit.
+- Rejects submodules and active merge, cherry-pick, revert, or bisect operations.
+- Does not copy ignored files such as `node_modules`, caches, and commonly `.env`.
+- Side-effect interception and Windows command shims are best effort.
+- Cannot reverse Git pushes or arbitrary external-system changes.
+- Secret redaction covers common formats, not every possible credential.
+- Rollback is unavailable after acceptance; resume is not implemented.
+- Independent clones trade setup time and disk for simple isolation and separate Git objects.
 
-`--allow-external` is explicit approval to let detected external actions run. It does not make those actions reversible.
+AgentTX V0 optimizes for correctness over workspace setup speed. See the [measured benchmarks](docs/BENCHMARKS.md).
 
-Command matching and PATH wrappers are **not a security sandbox**. A process can bypass them with an absolute binary path, an in-process network client, a renamed tool, or another execution route. See [the security model](docs/SECURITY_MODEL.md).
+## Project
 
-## How the transaction works
+- [Why AgentTX](docs/WHY_AGENTTX.md) — the category thesis
+- [Why transactions](docs/WHY_TRANSACTIONS.md) — technical design reasoning
+- [Roadmap](docs/ROADMAP.md) — now, next, and later without date promises
+- [Examples](examples/basic/README.md) — safe, local examples
+- [Contributing](CONTRIBUTING.md) — setup and architecture map
+- [Changelog](CHANGELOG.md) — released behavior
 
-```text
-original repository
-       │
-       ├── capture HEAD, status, and raw file fingerprints
-       │
-       ▼
-independent local clone (--no-hardlinks)
-       │
-       ├── overlay tracked, staged, unstaged, and untracked baseline changes
-       ├── create a private baseline commit
-       └── run the child with terminal pass-through and heuristic command shims
-       │
-       ▼
-REVIEW
-       ├── diff / inspect / verify / report
-       ├── commit: compare every touched path, then copy exact accepted files
-       └── rollback: delete only the isolated clone
-```
-
-AgentTX uses an independent clone instead of a linked `git worktree`. Linked worktrees share Git’s object database; staging an agent-created credential could otherwise leave a dangling object in the original repository after rollback. `--no-hardlinks` keeps transaction objects and refs local to the transaction directory.
-
-The original remote’s fetch URL is copied when present. Its push URL is replaced with `agenttx://blocked` unless the transaction was created with `--allow-external`. This is defense in depth, not containment.
-
-### Dirty repositories
-
-At transaction start, AgentTX overlays tracked changes and non-ignored untracked files into the clone, then commits that exact transaction baseline privately. Staged/unstaged distinctions are not reproduced inside the clone, but the original index is never changed.
-
-At acceptance, each transaction-touched path must still match its raw start-time fingerprint. If the user changed an overlapping path while the agent ran, AgentTX stops before applying anything. Unrelated changes are preserved. A temporary recovery backup supports all-or-nothing restoration if file application fails.
-
-### Local data
-
-Transaction data lives at:
-
-```text
-~/.agenttx/transactions/<transaction-id>/
-  metadata.json
-  events.jsonl
-  before.json
-  after.json
-  diff.patch
-  risk.json
-  verification.json
-  report.html
-  workspace/       # present until commit or rollback
-```
-
-Set `AGENTTX_HOME` to override the store location. No data is transmitted. There is no telemetry.
-
-`diff.patch` is a redacted review artifact. Acceptance copies verified final file content from the isolated workspace; it does not apply the redacted patch.
-
-## Risk model
-
-Risk scoring is deterministic and transparent. V0 does not call an LLM.
-
-| Condition | Points |
-|---|---:|
-| More than 20 changed files | +1 |
-| Dependency manifest changed | +2 |
-| Dependency lockfile changed | +2 |
-| Potential credential path touched | +3 |
-| External or remote side effect detected | +3 |
-| Destructive command detected | +4 |
-| Publish or deployment detected | +5 |
-
-Scores map to `LOW` (0–2), `MEDIUM` (3–5), `HIGH` (6–8), and `CRITICAL` (9+).
-
-## Verification policy
-
-`agenttx verify` only detects common checks from conventional project files. It does not execute them automatically. `agenttx verify --run` is explicit approval to run project-defined commands inside the transaction workspace.
-
-Detected families include Node (`test`, `typecheck`, `lint` scripts), Python (`pytest`), Rust (`cargo test`, `cargo clippy`), and Go (`go test ./...`). Project test commands execute repository code and should be treated accordingly.
-
-## Architecture
-
-```text
-src/
-  cli/          command surfaces and diagnostics
-  core/         transaction, clone, state, ledger, commit, rollback
-  adapters/     generic and named agent adapters
-  detectors/    command-side effects and secret-bearing paths
-  reporters/    terminal and standalone HTML
-```
-
-The core exports transaction primitives independently of the CLI. The current `AgentAdapter` boundary supports generic execution plus Claude, Codex, Gemini, and OpenCode identification without relying on undocumented hooks. A future `TransactionAdapter` layer can add database, browser, cloud, or MCP transactions only when those adapters have real commit/compensation behavior.
-
-Structured JSON schemas are documented in [docs/SCHEMAS.md](docs/SCHEMAS.md). The design thesis is in [docs/WHY_TRANSACTIONS.md](docs/WHY_TRANSACTIONS.md).
-
-## Honest limitations
-
-- V0 requires a non-bare Git repository with at least one commit.
-- Git submodules and repositories in active merge/cherry-pick/revert/bisect operations are rejected.
-- Ignored files are not copied into the transaction workspace. That commonly includes `node_modules`, build caches, and `.env`; tools may need to recreate dependencies inside the transaction.
-- The child retains the invoking user’s OS permissions. It can address paths outside the isolated repository.
-- Side-effect observation sees the top-level command and commands reached through known PATH shims. It cannot see all subprocesses, in-process HTTP, browser actions, MCP calls, or renamed/absolute executables.
-- Windows `.cmd` shims are best-effort and weaker than Unix executable shims.
-- Secret redaction recognizes common patterns and paths; it cannot identify every credential format. Transaction source files may contain secrets because they are the files under review, but metadata, ledger events, terminal summaries, stored patches, and HTML reports are redacted.
-- Rollback applies only before acceptance. V0 does not reverse a completed `agenttx commit`.
-- Crash recovery preserves and finalizes a dead `RUNNING` transaction for review. Resume is not implemented.
-- Independent clones add disk and setup overhead proportional to repository size.
-
-## Roadmap
-
-### V0
-
-- [x] independent Git transaction workspace
-- [x] CLI wrapper with interactive stdio
-- [x] dirty baseline capture
-- [x] diff and inspection
-- [x] conflict-safe acceptance
-- [x] rollback
-- [x] transaction history and crash discovery
-- [x] deterministic risk detection
-- [x] secret redaction
-- [x] JSON and standalone HTML reports
-
-### Next
-
-- [ ] OS-level sandboxing
-- [ ] network transaction proxy
-- [ ] stronger approval broker
-- [ ] Claude hooks
-- [ ] Codex integration
-- [ ] MCP integration
-- [ ] database transaction adapters
-- [ ] deployment adapters
-- [ ] team policies
-
-### Future
-
-AgentTX Cloud may add central policies, approvals, audit retention, agent identity, organization trust signals, and compliance controls. The open-source local transaction, diff, rollback, history, policy, and report workflow should remain genuinely useful.
-
-ResiliReplay is a separate project: ResiliReplay breaks agents; AgentTX contains consequences. V0 has no coupling to it.
-
-## Development
-
-```bash
-npm install
-npm run typecheck
-npm run lint
-npm test
-npm run build
-npm pack --dry-run
-```
-
-The integration suite uses real temporary Git repositories and real child processes. It covers clean and dirty baselines, staged changes, untracked files, add/modify/delete/rename/binary changes, rollback, conflict-safe acceptance, crash recovery, side-effect gates, ledger corruption, CLI exit codes, JSON schemas, and secret non-disclosure.
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) before changing safety-sensitive code.
-
-## License
-
-MIT
+AgentTX is local-first open-source infrastructure under the [MIT License](LICENSE).

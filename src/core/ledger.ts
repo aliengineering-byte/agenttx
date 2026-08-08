@@ -36,8 +36,13 @@ async function acquireLock(path: string, timeoutMs = 5_000): Promise<() => Promi
           continue;
         }
       } catch {
-        const lockStat = await stat(path);
-        if (Date.now() - lockStat.mtimeMs > 10_000) await rm(path, { force: true });
+        try {
+          const lockStat = await stat(path);
+          if (Date.now() - lockStat.mtimeMs > 10_000) await rm(path, { force: true });
+        } catch (statError) {
+          if ((statError as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw statError;
+        }
       }
       if (Date.now() - started >= timeoutMs) throw new Error("Timed out acquiring event ledger lock");
       await new Promise((resolve) => setTimeout(resolve, 20));
