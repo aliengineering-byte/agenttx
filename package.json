@@ -56,6 +56,14 @@
   ],
   "author": "AgentTX contributors",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aliengineering-byte/agenttx.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aliengineering-byte/agenttx/issues"
+  },
+  "homepage": "https://github.com/aliengineering-byte/agenttx#readme",
   "publishConfig": {
     "access": "public"
   },
