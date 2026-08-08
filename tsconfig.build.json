@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "declaration": true
+  },
+  "include": ["src/**/*.ts", "benchmarks/**/*.ts"],
+  "exclude": ["tests", "vitest.config.ts"]
+}
