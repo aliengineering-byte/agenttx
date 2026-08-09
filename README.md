@@ -2,57 +2,69 @@
 
 **Make AI agents undoable.**
 
-Run AI coding agents inside isolated Git transactions.
+**Git-style transactions for AI coding agents.**
 
-Inspect everything they changed. Commit the good. Roll back the bad.
+Run an agent in an isolated repository transaction. Inspect everything it changed. Commit the good. Roll back the bad.
 
-```bash
-npx agenttx run claude
-```
+[![npm version](https://img.shields.io/npm/v/agenttx?logo=npm)](https://www.npmjs.com/package/agenttx)
+[![CI](https://github.com/aliengineering-byte/agenttx/actions/workflows/ci.yml/badge.svg)](https://github.com/aliengineering-byte/agenttx/actions/workflows/ci.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-3fb950.svg)](LICENSE)
+[![Node.js 20+](https://img.shields.io/badge/node-20%2B-339933.svg)](https://nodejs.org/)
 
-![AgentTX deterministic demo: seven changes, a blocked push, high risk, and a verified rollback](docs/assets/agenttx-demo.svg)
+![AgentTX real offline demo: an agent changes seven files, AgentTX gates a simulated push, reports high risk, and rolls the transaction back](docs/assets/agenttx-demo.gif)
 
-✓ isolated repository workspace · ✓ full diff · ✓ rollback · ✓ conflict detection · ✓ transaction history · ✓ risk inspection · ✓ secret redaction · ✓ no cloud required
+**Run → Inspect → Commit / Rollback**
+
+[Static demo frame](docs/assets/agenttx-demo.png) · [Plain-text transcript](docs/assets/terminal-demo.txt)
 
 ## Quick start
 
-AgentTX requires Node.js 20+ and Git. Start from a Git repository with at least one commit.
+AgentTX requires Node.js 20+ and Git. Start inside a Git repository with at least one commit.
 
 ```bash
-npx agenttx doctor
-npx agenttx run <your-agent-command>
-npx agenttx inspect
+npm install --global agenttx
+cd my-project
+agenttx run <coding-agent>
 ```
 
-Then accept the transaction-relative file changes:
+When the agent exits, review the transaction:
 
 ```bash
-npx agenttx commit
+agenttx diff
+agenttx inspect
 ```
 
-Or discard them without changing your original working tree:
+Then accept its file changes—or discard the entire transaction:
 
 ```bash
-npx agenttx rollback
+agenttx commit
+# or
+agenttx rollback
 ```
 
-Try the real, deterministic, credential-free demo after installing AgentTX:
+`agenttx commit` applies files to your working tree; it does **not** create or stage a Git commit.
+
+Try the real, deterministic demo with no model, credentials, remote, or network write:
 
 ```bash
 agenttx demo
 ```
 
+## The transaction boundary
+
+AgentTX runs the child command inside an independent local Git clone, from the equivalent repository directory. Your original working tree stays available and unchanged until you explicitly accept the transaction. After the child exits, inspect its diff, verification results, detected side effects, and risk; then commit or roll back.
+
+> **Security boundary:** AgentTX v0.1.0 isolates supported repository changes, not the operating system. Child processes retain your normal user permissions, and external-action detection is heuristic. Read the [security model](docs/SECURITY_MODEL.md).
+
 ## Why AgentTX?
 
-Coding agents can now change source, dependencies, CI, and Git state across an entire repository. Git helps after changes reach your working tree, while permission prompts answer only whether an action may run. AgentTX gives each session a transaction boundary: work happens elsewhere, the result is inspectable, and acceptance is explicit. If the result is wrong, rollback removes the isolated workspace. Your original repository remains available throughout.
+Coding agents can change source, dependencies, CI, and Git state across an entire repository. Git gives us the underlying isolation primitives; AgentTX packages them into an agent-oriented lifecycle with dirty-baseline capture, a ledger, inspection, verification, conflict-safe acceptance, rollback, and history.
 
 ## How it works
 
 ![AgentTX transaction flow from original repository to isolated agent workspace, inspection, and commit or rollback](docs/assets/transaction-flow.svg)
 
 AgentTX captures the repository baseline, builds an independent local clone, overlays tracked and non-ignored untracked changes, and runs the child from the matching directory. When the child exits, the transaction enters `REVIEW`. Acceptance first checks every touched path against its start-time fingerprint; overlapping user changes stop the operation before any transaction file is applied.
-
-`agenttx commit` accepts files into the original working tree. It does **not** create or stage a Git commit.
 
 ## Commands
 
@@ -86,6 +98,8 @@ agenttx run -- node scripts/my-local-agent.mjs
 ```
 
 Named adapters identify common CLIs; they do not depend on private agent hooks. Availability and interactive behavior still depend on the installed tool and platform. See [agent compatibility](docs/AGENT_COMPATIBILITY.md) for the distinction between generic support and explicit smoke tests.
+
+Using AgentTX with Claude Code, Codex, Gemini CLI, OpenCode, or another coding agent? [Open a compatibility report](https://github.com/aliengineering-byte/agenttx/issues/new?template=agent-compatibility.yml). Real reports determine which agent-specific workflows receive deeper testing.
 
 ## Safety model
 

@@ -1,4 +1,4 @@
-# Show HN draft
+# Hacker News launch
 
 ## Title
 
@@ -6,26 +6,34 @@ Show HN: AgentTX – Git-style transactions for AI coding agents
 
 ## Post
 
-Coding agents are getting enough autonomy to change source, dependencies, CI, and Git state across a repository. I wanted a better boundary than letting each experimental session write directly into my working tree.
+I use coding agents increasingly often, and the thing I wanted was not another agent. I wanted a transaction boundary around the agent I already use.
 
-AgentTX wraps an arbitrary command in a local repository transaction:
+So I built AgentTX.
 
 ```text
-agenttx run <agent>
-agenttx diff / inspect / verify
-agenttx commit  # accept files into the working tree
+agenttx run <coding-agent>
+
+agenttx diff
+agenttx inspect
+agenttx commit
 # or
 agenttx rollback
 ```
 
-The original repository stays available while the child runs in an independent no-hardlink clone. AgentTX overlays the dirty baseline, records a hash-chained event ledger, produces deterministic risk and redacted reports, and checks every touched path for concurrent user changes before acceptance. `commit` accepts files; it does not create a Git commit.
+AgentTX runs the child command in an independent local Git transaction workspace. The original working tree stays available and unchanged until you accept the transaction. When the agent exits, AgentTX shows the diff, detected side effects, risk, and project verification commands. Acceptance checks touched paths for concurrent changes; rollback removes the isolated workspace.
 
-The demo is fully local and deterministic: a fake agent changes seven files, including dependencies and CI, deletes a source file, and safely attempts `git push` through AgentTX's shim. The push is gated, the transaction is rated HIGH, and rollback verifies the original repository is still clean.
+The 13.8-second demo is fully local and deterministic. A fake coding agent changes seven real fixture files, including auth code, dependencies, a lockfile, and CI; deletes a legacy file; and safely attempts `git push origin main`. AgentTX gates the simulated push, rates the transaction HIGH, shows the diff, and verifies rollback left the original repository clean.
 
-Important limitation: this is repository transaction isolation, not an OS sandbox. The child keeps the invoking user's permissions. Command gating is heuristic and can be bypassed by absolute binaries, renamed tools, libraries, or in-process network calls. AgentTX cannot undo a real push or arbitrary external side effect.
+Important limitation: v0.1.0 is repository transaction isolation, not an OS sandbox. The child retains the invoking user's permissions. External-command detection is heuristic, and AgentTX cannot undo a real push or arbitrary remote side effect.
 
-V0 is TypeScript, MIT licensed, zero runtime dependencies, no telemetry, and requires Node 20+ plus Git. It supports arbitrary commands rather than depending on one agent vendor.
+AgentTX is MIT licensed, has zero runtime dependencies and no telemetry, and requires Node.js 20+ plus Git. It wraps arbitrary executables rather than depending on private hooks from one agent vendor.
 
-Repository: [INSERT VERIFIED PUBLIC URL]
+GitHub: https://github.com/aliengineering-byte/agenttx
 
-I would especially value feedback on real agent/platform compatibility, large-repository setup cost, and where the transaction boundary is most useful in daily work.
+npm: https://www.npmjs.com/package/agenttx
+
+I would especially value reports from real coding-agent workflows: which CLI and OS you use, whether interactive execution behaves correctly, and where inspection or rollback changes what you are willing to delegate.
+
+## Posting note
+
+Submit the GitHub repository as the Show HN URL and use the body above as the first comment if the submission form does not accept a text body. Answer technical questions directly; do not repeat the post as marketing copy.

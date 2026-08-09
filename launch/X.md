@@ -1,37 +1,33 @@
-# X launch drafts
+# X launch options
 
-Replace `[LINK]` only after the public repository is verified. Attach the real 10–20 second demo capture.
+Attach `docs/assets/agenttx-demo.gif` to the demo option. Choose one option; do not post all three as a thread.
 
-## Extremely short
+## Option A — Hook
 
-AI coding agents can now change a lot of your project.
+AI coding agents can change half your repo before you decide whether you want the result.
 
 So I built Ctrl+Z for agent sessions.
 
 AgentTX: run → inspect → commit / rollback
 
-Git-style transactions. Local-first. Zero runtime deps.
+Open source: https://github.com/aliengineering-byte/agenttx
 
-[LINK]
+## Option B — Demo
 
-## Demo-focused
+This coding agent changed auth, dependencies, CI, and deleted a legacy file. Then it tried to push.
 
-This agent changed dependencies, CI, auth code, and deleted a legacy file. Then it tried to push.
+AgentTX gated the push, showed the 7-file diff, rated it HIGH risk, and rolled it all back.
 
-AgentTX gated the push, showed the 7-file diff, rated the session HIGH risk, and rolled everything back.
+Original workspace unchanged.
 
-The original repo stayed unchanged.
+https://github.com/aliengineering-byte/agenttx
 
-[GIF] [LINK]
+## Option C — Category thesis
 
-## Founder thesis
+Permissions answer: “Can the agent act?”
 
-Permissions answer: can the agent act?
+As agents become more autonomous, execution needs: “What if the agent is wrong?”
 
-As agents gain autonomy, we also need: what happened, can I inspect it, and what if the result is wrong?
+AgentTX is my first attempt at transaction semantics for coding agents: run → inspect → commit / rollback.
 
-AgentTX adds transaction semantics around coding-agent work:
-
-BEGIN → OBSERVE → INSPECT → COMMIT / ROLLBACK
-
-[LINK]
+https://github.com/aliengineering-byte/agenttx

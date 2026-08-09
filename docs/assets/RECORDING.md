@@ -1,26 +1,25 @@
-# Record the 10–20 second demo
+# Record the 13.8-second launch demo
 
-The production package has no recording dependency. Build first, use a terminal at least 100 columns wide, and record this deterministic local command:
+The production package has no recording dependency. The checked-in launch workflow runs the real deterministic demo, validates the seven-file transaction and rollback evidence, rejects private machine paths, and renders a GitHub-ready GIF plus static PNG.
 
-```bash
+```powershell
 npm ci
 npm run build
-npm run demo
+./launch/RECORD_DEMO.ps1
 ```
 
-For a tight launch edit, show these beats from the actual output:
+The renderer uses Python plus Pillow only as an external recording tool; neither is an AgentTX runtime dependency. Pass explicit executables or a monospace font when they are not on `PATH`:
 
-1. `agenttx demo` and the agent's short edit list;
-2. `BLOCKED` beside the safely simulated `git push`;
-3. `INSPECT`, `7 files changed`, and `Risk HIGH`;
-4. `ROLLBACK` and `Original workspace unchanged`.
-
-Target 10–20 seconds at 1.25–1.5× playback. Do not type into a real repository or configure a remote. Do not replace output with a mock: the checked-in `agenttx-demo.svg` is only a static representation of this real deterministic flow.
-
-An asciinema-compatible capture can be made without changing package dependencies:
-
-```bash
-asciinema rec --command "npm run demo" agenttx-demo.cast
+```powershell
+./launch/RECORD_DEMO.ps1 -Node /path/to/node -Python /path/to/python -Font /path/to/mono.ttf
 ```
 
-Review the cast for terminal paths or environment data before conversion or upload. The intended public frame is 1200×760, dark neutral background, monospace text, green for accepted/unchanged state, red for blocked state, and no gradients.
+Outputs:
+
+- `docs/assets/agenttx-demo.gif` — six staged frames, 13.8 seconds;
+- `docs/assets/agenttx-demo.png` — static launch screenshot;
+- `docs/assets/terminal-demo.txt` — privacy-safe transcript.
+
+The script does not configure a remote or send network writes. The fake agent changes real files only inside AgentTX's generated temporary repository, and its simulated `git push origin main` is gated by AgentTX. Rendering begins only after the real CLI reports `REVIEW`, `HIGH (7)`, seven changed files, a blocked push, rollback, and an unchanged original workspace.
+
+The intended public frame is 1200×760 with a dark neutral background, monospace text, green for successful rollback, red for the blocked action, and no gradients or machine-specific paths.

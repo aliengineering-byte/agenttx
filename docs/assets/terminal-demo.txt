@@ -9,20 +9,23 @@ Agent:
   changing .github/workflows/ci.yml
   attempting simulated external write: git push origin main
 
-BLOCKED  git push origin main
+AgentTX Transaction
+  State: REVIEW
+  Changes: 7 files (+21 / -5)
 
-INSPECT
-  7 files changed
-  +21 / -5
+Side Effects
+  [BLOCKED] git push can modify a remote repository
+
+$ agenttx inspect
   Risk: HIGH (7)
-  dependency manifest changed
-  dependency lockfile changed
-  external write detected and gated
+  • Dependency manifest changed
+  • Dependency lockfile changed
+  • External side effect detected
 
-DIFF
-  4 modified · 2 added · 1 deleted
+$ agenttx diff
+  7 files changed — 4 modified · 2 added · 1 deleted
 
-ROLLBACK
+$ agenttx rollback
   ✓ Transaction rolled back
   ✓ 7 transaction changes discarded
-  ✓ Original workspace UNCHANGED
+  ✓ Original workspace unchanged

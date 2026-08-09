@@ -1,15 +1,27 @@
-# LinkedIn launch draft
+# LinkedIn launch
 
-Coding agents are quickly moving from suggesting code to modifying entire repositories. I wanted a better primitive than simply trusting every change.
+Coding agents are quickly moving from suggesting code to modifying entire repositories.
 
-AgentTX gives AI coding agents Git-style transactions: run in isolation, inspect the result, then commit or roll back.
+The primitive I wanted was not another coding agent. It was a transaction boundary around the agents I already use.
 
-The original repository remains available while the agent works in an independent local clone. When the session ends, AgentTX summarizes the diff, selected side effects, risk, and verification checks. Acceptance refuses overlapping user changes; rejection removes the isolated transaction.
+So I built AgentTX: open-source, Git-style transactions for AI coding agents.
 
-The first release is deliberately local and narrow: TypeScript CLI, MIT license, zero runtime dependencies, no telemetry, no cloud account, and an arbitrary-command interface that can sit around different agent CLIs.
+```text
+agenttx run <coding-agent>
+agenttx diff
+agenttx inspect
+agenttx commit
+# or agenttx rollback
+```
 
-It is also explicit about what it is not. AgentTX V0 is not an OS security boundary, its command interception is heuristic, and it cannot reverse arbitrary external-system changes. Its strong guarantee applies to transaction-relative repository state before acceptance.
+The agent runs in an independent local repository transaction. Your original working tree stays available and unchanged until you accept the result. After the session, you can inspect the complete diff, detected side effects, risk, and verification checks—then commit the good or roll back the whole transaction.
 
-As software agents become autonomous, execution needs transaction semantics.
+The first release is intentionally focused: local-first, MIT licensed, zero runtime dependencies, no telemetry, and available on npm.
 
-Demo and source: [INSERT VERIFIED PUBLIC URL]
+It is also explicit about its boundary. AgentTX v0.1.0 is not an OS sandbox. Child processes retain normal user permissions, external-action detection is heuristic, and real remote side effects are not inherently reversible.
+
+As agents gain autonomy, execution needs transaction semantics.
+
+13.8-second demo and source: https://github.com/aliengineering-byte/agenttx
+
+npm: https://www.npmjs.com/package/agenttx
