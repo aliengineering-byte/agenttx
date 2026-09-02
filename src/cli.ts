@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { resolveAdapter } from "./adapters/agent.js";
 import { runDoctor, renderDoctor } from "./cli/doctor.js";
-import { writeRollbackEvidence } from "./core/evidence.js";
+import { verifyRollbackEvidenceFile, writeRollbackEvidence } from "./core/evidence.js";
 import { inspectTransaction } from "./core/inspection.js";
 import { EventLedger } from "./core/ledger.js";
 import { redactText } from "./core/redaction.js";
@@ -77,6 +77,7 @@ Usage:
   agenttx history [--json]
   agenttx replay <transaction-id> [--json]
   agenttx evidence <transaction-id> [--output path]
+  agenttx verify-evidence <file>
   agenttx report [transaction-id] --html [--output path]
   agenttx doctor [--json]
   agenttx demo [--keep]
@@ -213,6 +214,15 @@ async function handleEvidence(args: string[]): Promise<void> {
   print(`Rollback evidence written to ${path}`);
 }
 
+async function handleVerifyEvidence(args: string[]): Promise<void> {
+  const path = positional(args)[0];
+  if (!path) throw new Error("agenttx verify-evidence requires an evidence file.");
+  const verification = await verifyRollbackEvidenceFile(path);
+  print(`Evidence integrity verified for ${verification.transactionId}.`);
+  print(`Receipt SHA-256: ${verification.digest}`);
+  print("Authentication: none — this is unsigned, recomputable integrity, not authentication.");
+}
+
 async function handleReport(args: string[]): Promise<void> {
   if (!hasFlag(args, "--html")) throw new Error("V0 report output requires --html.");
   const id = positional(args)[0];
@@ -273,6 +283,10 @@ async function main(): Promise<void> {
     const [transactionId, tool, executable] = args.slice(0, separator);
     if (!transactionId || !tool || !executable || separator < 0) throw new Error("Invalid internal shim invocation.");
     process.exitCode = await runShim(transactionId, tool, executable, args.slice(separator + 1));
+    return;
+  }
+  if (command === "verify-evidence") {
+    await handleVerifyEvidence(args);
     return;
   }
   const recovered = await recoverInterruptedTransactions();

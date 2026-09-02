@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -151,12 +151,31 @@ describe("side-effect gating and privacy", () => {
     );
     expect(regenerated.stdout).toContain("Rollback evidence written to");
     const evidence = JSON.parse(await readFile(evidencePath, "utf8")) as {
-      evidenceType: string;
-      transaction: { state: string };
+      receipt: { evidenceType: string; transaction: { state: string }; result: { filesDiscarded: number } };
     };
-    expect(evidence).toMatchObject({
+    expect(evidence.receipt).toMatchObject({
       evidenceType: "agenttx.rollback",
       transaction: { state: "ROLLED_BACK" }
+    });
+    const verified = await execFileAsync(
+      process.execPath,
+      [builtCli, "verify-evidence", evidencePath],
+      { cwd: repository, env: process.env, encoding: "utf8", windowsHide: true }
+    );
+    expect(verified.stdout).toContain("Evidence integrity verified");
+    expect(verified.stdout).toContain("unsigned, recomputable integrity, not authentication");
+
+    evidence.receipt.result.filesDiscarded += 1;
+    await writeFile(evidencePath, `${JSON.stringify(evidence)}\n`);
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [builtCli, "verify-evidence", evidencePath],
+        { cwd: repository, env: process.env, encoding: "utf8", windowsHide: true }
+      )
+    ).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining("Evidence receipt digest mismatch")
     });
   });
 });

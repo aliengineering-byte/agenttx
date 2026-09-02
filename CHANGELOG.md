@@ -6,8 +6,15 @@ All notable changes to AgentTX are documented here. The project follows Semantic
 
 ### Added
 
-- Successful rollback now emits path-free, hash-linked evidence that proves whether the Git-visible original workspace status changed during rollback.
+- Successful rollback now emits path-free, hash-linked evidence recording whether the Git-visible original workspace status changed during rollback.
 - `agenttx evidence <transaction-id>` regenerates rollback evidence from the terminal ledger when the initial atomic artifact write is unavailable.
+- `agenttx verify-evidence <file>` checks the canonical outer receipt digest and every offline-derivable invariant without claiming authentication.
+- Workspace evidence now binds tracked diffs and untracked content fingerprints, and rollback metadata is bound into the terminal ledger event.
+
+### Changed
+
+- Bump the unreleased package identity to `0.2.0`.
+- Pin CI checkout and Node setup actions to reviewed immutable commits.
 
 ## [0.1.0] - 2026-08-08
 

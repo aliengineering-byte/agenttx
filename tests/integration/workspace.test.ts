@@ -3,10 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { commitTransaction, inspectDiff, recoverInterruptedTransactions, rollbackTransaction } from "../../src/core/workspace.js";
-import { writeRollbackEvidence } from "../../src/core/evidence.js";
+import {
+  canonicalSha256,
+  verifyRollbackEvidence,
+  writeRollbackEvidence
+} from "../../src/core/evidence.js";
 import { createTransaction } from "../../src/core/workspace.js";
 import { transitionTransaction, writeMetadata } from "../../src/core/store.js";
-import type { CommandSpec } from "../../src/core/types.js";
+import type { CommandSpec, RollbackEvidence } from "../../src/core/types.js";
 import { createRepository, git, isolatedHome, runNodeTransaction, text } from "../helpers.js";
 
 beforeEach(async () => {
@@ -32,15 +36,8 @@ describe("Git transaction workspace", () => {
     expect((await git(repository, ["status", "--porcelain"])).trim()).toBe("");
     if (!result.evidencePath) throw new Error(result.evidenceWarning ?? "rollback evidence missing");
     const evidenceText = await readFile(result.evidencePath, "utf8");
-    const evidence = JSON.parse(evidenceText) as {
-      evidenceType: string;
-      producer: { repository: string; capability: string };
-      transaction: { transactionId: string; state: string };
-      result: { filesDiscarded: number; originalWorkspaceStatusUnchanged: boolean | null };
-      eventChain: { finalHash: string };
-      redaction: { filePathsIncluded: boolean; privatePathsIncluded: boolean };
-    };
-    expect(evidence).toMatchObject({
+    const evidence = JSON.parse(evidenceText) as RollbackEvidence;
+    expect(evidence.receipt).toMatchObject({
       evidenceType: "agenttx.rollback",
       producer: {
         repository: "aliengineering-byte/agenttx",
@@ -50,10 +47,33 @@ describe("Git transaction workspace", () => {
       result: { filesDiscarded: 3, originalWorkspaceStatusUnchanged: true },
       redaction: { filePathsIncluded: false, privatePathsIncluded: false }
     });
-    expect(evidence.eventChain.finalHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(evidence.receipt.eventChain.finalHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(verifyRollbackEvidence(evidence)).toMatchObject({
+      valid: true,
+      transactionId: metadata.transactionId,
+      authentication: "none"
+    });
     const serialized = JSON.stringify(evidence);
     expect(serialized).not.toContain(repository);
     expect(serialized).not.toContain("a.txt");
+
+    const unsignedTamper = structuredClone(evidence);
+    unsignedTamper.receipt.result.filesDiscarded += 1;
+    expect(() => verifyRollbackEvidence(unsignedTamper)).toThrow("Evidence receipt digest mismatch.");
+
+    const recomputedBooleanTamper = structuredClone(evidence);
+    recomputedBooleanTamper.receipt.result.originalWorkspaceStatusUnchanged = false;
+    recomputedBooleanTamper.integrity.digest = canonicalSha256(recomputedBooleanTamper.receipt);
+    expect(() => verifyRollbackEvidence(recomputedBooleanTamper)).toThrow(
+      "Workspace unchanged result is not derived from its before/after digests."
+    );
+
+    const recomputedMetadataTamper = structuredClone(evidence);
+    recomputedMetadataTamper.receipt.transaction.baseHead = "0".repeat(40);
+    recomputedMetadataTamper.integrity.digest = canonicalSha256(recomputedMetadataTamper.receipt);
+    expect(() => verifyRollbackEvidence(recomputedMetadataTamper)).toThrow(
+      "Transaction metadata digest mismatch."
+    );
     expect(await writeRollbackEvidence(result.metadata)).toBe(result.evidencePath);
     const occupied = join(metadata.transactionDirectory, "occupied-evidence.json");
     await writeFile(occupied, "do not replace\n");
@@ -84,15 +104,12 @@ describe("Git transaction workspace", () => {
     expect(result.metadata.status).toBe("ROLLED_BACK");
     expect(result.originalWorkspaceStatusUnchanged).toBeNull();
     if (!result.evidencePath) throw new Error(result.evidenceWarning ?? "rollback evidence missing");
-    const evidence = JSON.parse(await readFile(result.evidencePath, "utf8")) as {
-      result: { originalWorkspaceStatusUnchanged: boolean | null };
-      workspaceStatusEvidence: { before: string | null; after: string | null };
-    };
-    expect(evidence.result.originalWorkspaceStatusUnchanged).toBeNull();
-    expect(evidence.workspaceStatusEvidence).toEqual({
+    const evidence = JSON.parse(await readFile(result.evidencePath, "utf8")) as RollbackEvidence;
+    expect(evidence.receipt.result.originalWorkspaceStatusUnchanged).toBeNull();
+    expect(evidence.receipt.workspaceStatusEvidence).toEqual({
       before: null,
       after: null,
-      algorithm: "sha256(git-head-nul-status-porcelain-v2-z)"
+      algorithm: "sha256(agenttx-git-visible-content-v1)"
     });
   });
 

@@ -120,56 +120,71 @@ Secret finding values are always the literal `[REDACTED]`.
 
 ## Rollback evidence
 
-A successful `agenttx rollback` writes `rollback-evidence.json` in the transaction directory and prints its location. If that final atomic write fails, rollback remains complete and the CLI prints an actionable warning; `agenttx evidence <transaction-id>` regenerates the artifact from `after.json` and the terminal event ledger. Evidence export accepts an existing byte-identical artifact but refuses to replace different content, including at an explicit `--output` path. The artifact is deliberately path-free by default:
+A successful `agenttx rollback` writes `rollback-evidence.json` in the transaction
+directory and prints its location. If persistence fails, rollback remains complete
+and the CLI prints `agenttx evidence <transaction-id>` as the regeneration path.
+Evidence export accepts an existing byte-identical artifact but refuses to replace
+different content, including at an explicit `--output` path.
+
+The schema has an unsigned receipt plus an outer integrity record:
 
 ```json
 {
-  "schemaVersion": 1,
-  "evidenceType": "agenttx.rollback",
-  "producer": {
-    "repository": "aliengineering-byte/agenttx",
-    "version": "0.1.0",
-    "capability": "repository-transaction-rollback",
-    "documentation": "https://github.com/aliengineering-byte/agenttx/blob/main/docs/SCHEMAS.md#rollback-evidence"
+  "receipt": {
+    "schemaVersion": 1,
+    "evidenceType": "agenttx.rollback",
+    "producer": { "version": "0.2.0", "...": "..." },
+    "transaction": { "state": "ROLLED_BACK", "...": "..." },
+    "result": { "originalWorkspaceStatusUnchanged": true, "...": "..." },
+    "workspaceStatusEvidence": {
+      "algorithm": "sha256(agenttx-git-visible-content-v1)",
+      "before": "<sha256>",
+      "after": "<sha256>"
+    },
+    "eventChain": {
+      "algorithm": "sha256(JSON.stringify(event))",
+      "events": 7,
+      "finalHash": "<sha256>",
+      "terminalEvent": { "type": "rollback.completed", "...": "..." }
+    },
+    "artifacts": {
+      "transactionDiff": { "sha256": "<sha256>", "...": "..." },
+      "transactionMetadata": { "sha256": "<sha256>", "...": "..." }
+    },
+    "redaction": {
+      "filePathsIncluded": false,
+      "commandArgumentsIncluded": false,
+      "privatePathsIncluded": false,
+      "secrets": "redacted"
+    },
+    "limitations": ["..."]
   },
-  "transaction": {
-    "transactionId": "atx_20260808_153522_a81f",
-    "baselineCommit": "<git-object-id>",
-    "baseHead": "<git-object-id>",
-    "state": "ROLLED_BACK",
-    "completedAt": "2026-08-08T15:43:01.000Z"
-  },
-  "result": {
-    "filesDiscarded": 2,
-    "additionsDiscarded": 12,
-    "deletionsDiscarded": 3,
-    "binaryFilesDiscarded": 0,
-    "originalWorkspaceStatusUnchanged": true
-  },
-  "workspaceStatusEvidence": {
-    "algorithm": "sha256(git-head-nul-status-porcelain-v2-z)",
-    "before": "<sha256>",
-    "after": "<sha256>"
-  },
-  "eventChain": {
+  "integrity": {
     "algorithm": "sha256",
-    "events": 7,
-    "finalHash": "<sha256>"
-  },
-  "artifacts": {
-    "transactionDiff": {
-      "algorithm": "sha256(JSON.stringify(diff))",
-      "sha256": "<sha256>"
-    }
-  },
-  "redaction": {
-    "filePathsIncluded": false,
-    "commandArgumentsIncluded": false,
-    "privatePathsIncluded": false,
-    "secrets": "redacted"
-  },
-  "limitations": ["..."]
+    "canonicalization": "agenttx-canonical-json-v1",
+    "scope": "receipt",
+    "authentication": "none",
+    "digest": "<sha256>"
+  }
 }
 ```
 
-`originalWorkspaceStatusUnchanged` compares hashes of Git `HEAD` plus porcelain-v2 status immediately before and after isolated-workspace removal. It is `null` when the original repository cannot be inspected. It does not cover ignored files or external systems; AgentTX remains repository isolation, not an operating-system security boundary. The terminal event binds the path-free diff digest and workspace-status digests into the validated event chain without copying commands, file paths, or user content into the exported evidence.
+`agenttx-canonical-json-v1` serializes primitives with JSON rules, preserves array
+order, and sorts object keys by explicit UTF-16 code-unit comparison. The outer
+digest covers every field in `receipt`. `agenttx verify-evidence <file>` recomputes
+that digest and checks strict field sets, formats and counts, the transaction
+metadata digest, the terminal ledger event hash and cross-references, and the
+workspace result derived from the before/after digests.
+
+`originalWorkspaceStatusUnchanged` is never trusted as an independent assertion.
+It is `null` if either workspace digest is unavailable; otherwise it is exactly
+the equality result for those digests. `agenttx-git-visible-content-v1` commits to
+Git `HEAD`, porcelain-v2 status, the full binary tracked diff relative to `HEAD`,
+and sorted untracked path/content fingerprints. Only the digests are exported;
+ignored files and external systems remain outside the receipt.
+
+The terminal event binds the transaction ID, baseline/base object IDs, completion
+time, discarded diff, and workspace digests without exporting commands, private
+paths, or file names. The receipt is deliberately unsigned and recomputable. Its
+hash detects accidental or partial alteration, but is not authentication and is
+not proof against a party able to rewrite the complete local receipt and ledger.

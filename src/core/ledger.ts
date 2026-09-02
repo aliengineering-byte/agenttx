@@ -5,7 +5,7 @@ import { pathExists } from "./fs.js";
 import { redactValue } from "./redaction.js";
 import { SCHEMA_VERSION, type TransactionEvent } from "./types.js";
 
-function eventDigest(event: Omit<TransactionEvent, "hash">): string {
+export function eventDigest(event: Omit<TransactionEvent, "hash">): string {
   return createHash("sha256").update(JSON.stringify(event)).digest("hex");
 }
 

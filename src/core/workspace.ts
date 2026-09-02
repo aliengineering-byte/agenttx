@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { EventLedger } from "./ledger.js";
-import { writeRollbackEvidence } from "./evidence.js";
+import {
+  canonicalSha256,
+  deriveWorkspaceStatusUnchanged,
+  rollbackTransactionRecord,
+  writeRollbackEvidence
+} from "./evidence.js";
 import { assertContained, assertSafeRelativePath, copyEntry, fingerprintPath, fingerprintsEqual, pathExists, toPosixPath, writeJsonAtomic } from "./fs.js";
 import { findRepository, runGit, splitNull } from "./git.js";
 import { redactText, sanitizeCommand } from "./redaction.js";
@@ -67,15 +72,24 @@ async function captureBefore(repositoryRoot: string, head: string): Promise<Befo
 
 async function workspaceStatusDigest(repositoryRoot: string): Promise<string | null> {
   try {
-    const [head, status] = await Promise.all([
+    const [head, status, trackedDiff, untrackedOutput] = await Promise.all([
       runGit(repositoryRoot, ["rev-parse", "HEAD"]),
-      runGit(repositoryRoot, ["status", "--porcelain=v2", "-z", "--untracked-files=all"])
+      runGit(repositoryRoot, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
+      runGit(repositoryRoot, ["diff", "--binary", "--full-index", "--no-ext-diff", "--no-textconv", "HEAD", "--"]),
+      runGit(repositoryRoot, ["ls-files", "-z", "--others", "--exclude-standard"])
     ]);
-    return createHash("sha256")
-      .update(head.stdout.trim())
-      .update("\0")
-      .update(status.stdout)
-      .digest("hex");
+    const untracked = await Promise.all(
+      splitNull(untrackedOutput.stdout)
+        .sort()
+        .map(async (path) => ({ path, fingerprint: await fingerprintPath(join(repositoryRoot, path)) }))
+    );
+    return canonicalSha256({
+      format: "agenttx-git-visible-content-v1",
+      head: head.stdout.trim(),
+      status: status.stdout,
+      trackedDiff: trackedDiff.stdout,
+      untracked
+    });
   } catch {
     return null;
   }
@@ -522,16 +536,17 @@ export async function rollbackTransaction(metadata: TransactionMetadata): Promis
     completedAt: new Date().toISOString()
   });
   const workspaceStatusAfter = await workspaceStatusDigest(metadata.repositoryRoot);
-  const originalWorkspaceStatusUnchanged =
-    workspaceStatusBefore === null || workspaceStatusAfter === null
-      ? null
-      : workspaceStatusBefore === workspaceStatusAfter;
+  const originalWorkspaceStatusUnchanged = deriveWorkspaceStatusUnchanged(
+    workspaceStatusBefore,
+    workspaceStatusAfter
+  );
+  const transactionSha256 = canonicalSha256(rollbackTransactionRecord(metadata));
   await ledger.append("rollback.completed", {
     filesDiscarded: diff.filesChanged,
     diffSha256: createHash("sha256").update(JSON.stringify(diff)).digest("hex"),
+    transactionSha256,
     workspaceStatusBefore,
-    workspaceStatusAfter,
-    originalWorkspaceStatusUnchanged
+    workspaceStatusAfter
   });
   let evidencePath: string | null = null;
   let evidenceWarning: string | null = null;

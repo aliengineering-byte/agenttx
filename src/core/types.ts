@@ -155,7 +155,7 @@ export interface TransactionInspection {
   commandCount: number;
 }
 
-export interface RollbackEvidence {
+export interface RollbackReceipt {
   schemaVersion: typeof SCHEMA_VERSION;
   evidenceType: "agenttx.rollback";
   producer: {
@@ -179,18 +179,23 @@ export interface RollbackEvidence {
     originalWorkspaceStatusUnchanged: boolean | null;
   };
   workspaceStatusEvidence: {
-    algorithm: "sha256(git-head-nul-status-porcelain-v2-z)";
+    algorithm: "sha256(agenttx-git-visible-content-v1)";
     before: string | null;
     after: string | null;
   };
   eventChain: {
-    algorithm: "sha256";
+    algorithm: "sha256(JSON.stringify(event))";
     events: number;
     finalHash: string;
+    terminalEvent: Omit<TransactionEvent, "hash">;
   };
   artifacts: {
     transactionDiff: {
       algorithm: "sha256(JSON.stringify(diff))";
+      sha256: string;
+    };
+    transactionMetadata: {
+      algorithm: "sha256(agenttx-canonical-json-v1)";
       sha256: string;
     };
   };
@@ -201,4 +206,23 @@ export interface RollbackEvidence {
     secrets: "redacted";
   };
   limitations: string[];
+}
+
+export interface RollbackEvidence {
+  receipt: RollbackReceipt;
+  integrity: {
+    algorithm: "sha256";
+    canonicalization: "agenttx-canonical-json-v1";
+    scope: "receipt";
+    authentication: "none";
+    digest: string;
+  };
+}
+
+export interface EvidenceVerification {
+  valid: true;
+  evidenceType: "agenttx.rollback";
+  transactionId: string;
+  digest: string;
+  authentication: "none";
 }

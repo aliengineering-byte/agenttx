@@ -39,7 +39,7 @@ Run from the repository root. Record evidence in the release notes or release ha
 
 - [ ] GitHub CI green on the final release commit
 - [ ] release commit SHA recorded
-- [ ] annotated `v0.1.0` tag prepared from that exact commit
+- [ ] annotated `v0.2.0` tag prepared from that exact commit
 - [ ] package tarball SHA-256 recorded
 - [ ] GitHub repository publication verified
 - [ ] npm publication verified from the public registry
