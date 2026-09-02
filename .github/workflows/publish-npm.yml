@@ -1,0 +1,325 @@
+name: Publish AgentTX 0.2.0 to npm
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-agenttx-0.2.0
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: v0.2.0
+  RELEASE_VERSION: 0.2.0
+  RELEASE_COMMIT: 7382c4f06863e684451da9c27111cd7c18dcc9ee
+  TARBALL_SHA256: 809fd289573e14c29d4b629049eb414a6c30d5e1f9a044fd7ed63c91323b9408
+  CHECKSUM_SHA256: 7a1b25217f8494b3ccd75b9a9abe82a62030eb64de5fa75cdd0e689624a4d5f8
+
+jobs:
+  verify:
+    name: Verify source and immutable npm tarball
+    if: >-
+      github.repository == 'aliengineering-byte/agenttx' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+
+      - name: Pin the OIDC-capable npm client
+        run: npm install --global npm@11.9.0
+
+      - name: Verify the protected tag and package identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin \
+            "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          test "$(git cat-file -t "refs/tags/$RELEASE_TAG")" = tag
+          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$RELEASE_COMMIT"
+          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
+          node --input-type=module <<'NODE'
+          import manifest from "./package.json" with { type: "json" };
+          if (manifest.name !== "agenttx") throw new Error("Package name mismatch");
+          if (manifest.version !== "0.2.0") throw new Error("Package version mismatch");
+          if (manifest.repository?.url !== "git+https://github.com/aliengineering-byte/agenttx.git") {
+            throw new Error("Public repository URL mismatch");
+          }
+          if (manifest.publishConfig?.access !== "public") throw new Error("Public access mismatch");
+          NODE
+          if npm view "agenttx@$RELEASE_VERSION" version >/dev/null 2>&1; then
+            echo "agenttx@$RELEASE_VERSION already exists; refusing to republish" >&2
+            exit 1
+          fi
+
+      - name: Run the complete source and package verification suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run build
+          npm test
+          npm run scan:secrets
+          npm run check:links
+          npm run release:verify
+          npm run demo
+
+      - name: Download and verify the exact GitHub release tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="agenttx-$RELEASE_VERSION.tgz"
+          checksum="agenttx-$RELEASE_VERSION.sha256"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG"
+          mkdir dist
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "dist/$tarball" "$base/$tarball"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "dist/$checksum" "$base/$checksum"
+          printf '%s  %s\n%s  %s\n' \
+            "$TARBALL_SHA256" "dist/$tarball" \
+            "$CHECKSUM_SHA256" "dist/$checksum" | sha256sum --check --strict
+          (cd dist && sha256sum --check --strict "$checksum")
+
+      - name: Inspect the publication payload and reject unsafe contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="dist/agenttx-$RELEASE_VERSION.tgz"
+          python3 - "$tarball" <<'PY'
+          import pathlib
+          import re
+          import sys
+          import tarfile
+
+          archive = tarfile.open(sys.argv[1], "r:gz")
+          members = archive.getmembers()
+          assert 1 <= len(members) <= 250
+          assert sum(member.size for member in members) <= 10_000_000
+          allowed_roots = {
+              "dist", "docs", "scripts", "CHANGELOG.md", "LICENSE", "README.md",
+              "SECURITY.md", "package.json",
+          }
+          blocked_parts = {
+              ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv",
+              "__pycache__", "node_modules",
+          }
+          patterns = [
+              re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
+              re.compile(rb"(?:ghp_|github_pat_|npm_)[A-Za-z0-9_]{30,}"),
+              re.compile(rb"pypi-[A-Za-z0-9_-]{20,}"),
+              re.compile(rb"AKIA[0-9A-Z]{16}"),
+              re.compile(rb"/home/runner/"),
+              re.compile(rb"/Users/[^/\s]+/"),
+              re.compile(rb"[A-Za-z]:\\\\Users\\\\[^\\\s]+\\\\"),
+          ]
+          for member in members:
+              name = member.name
+              assert "\\" not in name, name
+              path = pathlib.PurePosixPath(name)
+              assert not path.is_absolute() and ".." not in path.parts, name
+              assert path.parts[0] == "package" and len(path.parts) >= 2, name
+              assert not blocked_parts.intersection(path.parts), name
+              assert path.parts[1] in allowed_roots, name
+              assert not name.startswith("package/src/"), name
+              assert pathlib.PurePosixPath(name).suffix.lower() not in {
+                  ".key", ".p12", ".pem", ".pfx",
+              }, name
+              assert not member.issym() and not member.islnk(), name
+              if member.isfile():
+                  assert member.size <= 3_000_000, name
+                  stream = archive.extractfile(member)
+                  assert stream is not None
+                  value = stream.read()
+                  for pattern in patterns:
+                      assert pattern.search(value) is None, (name, pattern.pattern)
+          PY
+          mkdir "$RUNNER_TEMP/package-inspect"
+          tar -xzf "$tarball" -C "$RUNNER_TEMP/package-inspect"
+          test "$(find "$RUNNER_TEMP/package-inspect/package" -type f | wc -l)" -le 250
+          test "$(du -sb "$RUNNER_TEMP/package-inspect/package" | cut -f1)" -le 10000000
+          test -z "$(find "$RUNNER_TEMP/package-inspect/package" -type l -print -quit)"
+          node --input-type=module - "$RUNNER_TEMP/package-inspect/package/package.json" <<'NODE'
+          import { readFile } from "node:fs/promises";
+          const manifest = JSON.parse(await readFile(process.argv[2], "utf8"));
+          if (manifest.name !== "agenttx" || manifest.version !== "0.2.0") {
+            throw new Error("Packed identity mismatch");
+          }
+          if (manifest.repository?.url !== "git+https://github.com/aliengineering-byte/agenttx.git") {
+            throw new Error("Packed repository mismatch");
+          }
+          if (manifest.bin?.agenttx !== "./dist/src/cli.js") throw new Error("CLI entry missing");
+          NODE
+          npm publish "$tarball" --access public --dry-run
+
+      - name: Exercise rollback receipt verification and tamper rejection from the tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          prefix="$root/prefix"
+          repository="$root/repository"
+          export AGENTTX_HOME="$root/agenttx-home"
+          npm install --ignore-scripts --prefix "$prefix" "./dist/agenttx-$RELEASE_VERSION.tgz"
+          cli="$prefix/node_modules/agenttx/dist/src/cli.js"
+          mkdir "$repository"
+          cd "$repository"
+          printf 'before\n' > file.txt
+          printf "import { writeFileSync } from 'node:fs';\nwriteFileSync('file.txt', 'agent change\\n');\n" > agent.mjs
+          git init -q
+          git add -A
+          git -c user.name='AgentTX Registry Verification' \
+            -c user.email='registry-verification@agenttx.invalid' \
+            commit -q -m baseline
+          node "$cli" run node agent.mjs
+          node "$cli" rollback
+          test "$(cat file.txt)" = before
+          test -z "$(git status --porcelain)"
+          evidence="$(find "$AGENTTX_HOME" -name rollback-evidence.json -type f -print -quit)"
+          test -n "$evidence"
+          node "$cli" verify-evidence "$evidence"
+          tampered="$root/tampered-evidence.json"
+          node --input-type=module - "$evidence" "$tampered" <<'NODE'
+          import { readFile, writeFile } from "node:fs/promises";
+          const value = JSON.parse(await readFile(process.argv[2], "utf8"));
+          value.receipt.result.filesDiscarded += 1;
+          await writeFile(process.argv[3], `${JSON.stringify(value)}\n`);
+          NODE
+          set +e
+          output="$(node "$cli" verify-evidence "$tampered" 2>&1)"
+          code=$?
+          set -e
+          test "$code" -eq 1
+          grep -Fq 'Evidence receipt digest mismatch' <<<"$output"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agenttx-0.2.0-verified-tarball
+          path: dist/agenttx-0.2.0.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish through npm Trusted Publishing
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/agenttx/v/0.2.0
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+      - run: npm install --global npm@11.9.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: agenttx-0.2.0-verified-tarball
+          path: dist
+      - run: npm publish dist/agenttx-0.2.0.tgz --access public
+
+  verify-public:
+    name: Verify the public npm consumer path
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+      - name: Pin public verification clients
+        run: |
+          npm install --global npm@11.9.0
+          npm install --global pnpm@10.14.0
+      - name: Query npm and verify the exact public tarball and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..18}; do
+            if curl --fail --silent --show-error \
+              "https://registry.npmjs.org/agenttx/$RELEASE_VERSION" \
+              --output "$RUNNER_TEMP/npm.json"; then
+              break
+            fi
+            sleep 10
+          done
+          tarball_url="$(node --input-type=module - "$RUNNER_TEMP/npm.json" <<'NODE'
+          import { readFile } from "node:fs/promises";
+          const value = JSON.parse(await readFile(process.argv[2], "utf8"));
+          if (value.name !== "agenttx" || value.version !== "0.2.0") throw new Error("Registry identity mismatch");
+          if (!value.dist?.integrity?.startsWith("sha512-")) throw new Error("Registry integrity missing");
+          if (value.dist?.attestations?.provenance?.predicateType !== "https://slsa.dev/provenance/v1") {
+            throw new Error("npm provenance attestation missing");
+          }
+          process.stdout.write(value.dist.tarball);
+          NODE
+          )"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/agenttx-0.2.0.tgz" "$tarball_url"
+          printf '%s  %s\n' "$TARBALL_SHA256" "$RUNNER_TEMP/agenttx-0.2.0.tgz" | \
+            sha256sum --check --strict
+          test "$(npm view agenttx version)" = "$RELEASE_VERSION"
+
+      - name: Run the exact one-command public demo
+        working-directory: ${{ runner.temp }}
+        run: pnpm dlx agenttx@0.2.0 demo
+
+      - name: Verify npm signatures, rollback evidence, and tamper rejection
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(mktemp -d)"
+          consumer="$root/consumer"
+          repository="$root/repository"
+          export AGENTTX_HOME="$root/agenttx-home"
+          mkdir "$consumer"
+          cd "$consumer"
+          npm init --yes >/dev/null
+          npm install --ignore-scripts agenttx@0.2.0
+          npm audit signatures
+          cli="$consumer/node_modules/agenttx/dist/src/cli.js"
+          mkdir "$repository"
+          cd "$repository"
+          printf 'before\n' > file.txt
+          printf "import { writeFileSync } from 'node:fs';\nwriteFileSync('file.txt', 'registry change\\n');\n" > agent.mjs
+          git init -q
+          git add -A
+          git -c user.name='AgentTX Public Verification' \
+            -c user.email='public-verification@agenttx.invalid' \
+            commit -q -m baseline
+          node "$cli" run node agent.mjs
+          node "$cli" rollback
+          test "$(cat file.txt)" = before
+          test -z "$(git status --porcelain)"
+          evidence="$(find "$AGENTTX_HOME" -name rollback-evidence.json -type f -print -quit)"
+          test -n "$evidence"
+          node "$cli" verify-evidence "$evidence"
+          tampered="$root/tampered-evidence.json"
+          node --input-type=module - "$evidence" "$tampered" <<'NODE'
+          import { readFile, writeFile } from "node:fs/promises";
+          const value = JSON.parse(await readFile(process.argv[2], "utf8"));
+          value.receipt.transaction.state = "COMMITTED";
+          await writeFile(process.argv[3], `${JSON.stringify(value)}\n`);
+          NODE
+          if node "$cli" verify-evidence "$tampered"; then
+            echo "Tampered public rollback evidence was accepted" >&2
+            exit 1
+          fi
