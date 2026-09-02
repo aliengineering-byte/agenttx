@@ -154,3 +154,51 @@ export interface TransactionInspection {
   eventCount: number;
   commandCount: number;
 }
+
+export interface RollbackEvidence {
+  schemaVersion: typeof SCHEMA_VERSION;
+  evidenceType: "agenttx.rollback";
+  producer: {
+    repository: "aliengineering-byte/agenttx";
+    version: string;
+    capability: "repository-transaction-rollback";
+    documentation: string;
+  };
+  transaction: {
+    transactionId: string;
+    baselineCommit: string;
+    baseHead: string;
+    state: "ROLLED_BACK";
+    completedAt: string;
+  };
+  result: {
+    filesDiscarded: number;
+    additionsDiscarded: number;
+    deletionsDiscarded: number;
+    binaryFilesDiscarded: number;
+    originalWorkspaceStatusUnchanged: boolean | null;
+  };
+  workspaceStatusEvidence: {
+    algorithm: "sha256(git-head-nul-status-porcelain-v2-z)";
+    before: string | null;
+    after: string | null;
+  };
+  eventChain: {
+    algorithm: "sha256";
+    events: number;
+    finalHash: string;
+  };
+  artifacts: {
+    transactionDiff: {
+      algorithm: "sha256(JSON.stringify(diff))";
+      sha256: string;
+    };
+  };
+  redaction: {
+    filePathsIncluded: false;
+    commandArgumentsIncluded: false;
+    privatePathsIncluded: false;
+    secrets: "redacted";
+  };
+  limitations: string[];
+}

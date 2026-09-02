@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, readlink, rename, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { commitTransaction, inspectDiff, recoverInterruptedTransactions, rollbackTransaction } from "../../src/core/workspace.js";
+import { writeRollbackEvidence } from "../../src/core/evidence.js";
 import { createTransaction } from "../../src/core/workspace.js";
 import { transitionTransaction, writeMetadata } from "../../src/core/store.js";
 import type { CommandSpec } from "../../src/core/types.js";
@@ -29,6 +30,70 @@ describe("Git transaction workspace", () => {
     expect(await text(join(repository, "a.txt"))).toBe("before-a\n");
     expect(await text(join(repository, "delete.txt"))).toBe("keep me\n");
     expect((await git(repository, ["status", "--porcelain"])).trim()).toBe("");
+    if (!result.evidencePath) throw new Error(result.evidenceWarning ?? "rollback evidence missing");
+    const evidenceText = await readFile(result.evidencePath, "utf8");
+    const evidence = JSON.parse(evidenceText) as {
+      evidenceType: string;
+      producer: { repository: string; capability: string };
+      transaction: { transactionId: string; state: string };
+      result: { filesDiscarded: number; originalWorkspaceStatusUnchanged: boolean | null };
+      eventChain: { finalHash: string };
+      redaction: { filePathsIncluded: boolean; privatePathsIncluded: boolean };
+    };
+    expect(evidence).toMatchObject({
+      evidenceType: "agenttx.rollback",
+      producer: {
+        repository: "aliengineering-byte/agenttx",
+        capability: "repository-transaction-rollback"
+      },
+      transaction: { transactionId: metadata.transactionId, state: "ROLLED_BACK" },
+      result: { filesDiscarded: 3, originalWorkspaceStatusUnchanged: true },
+      redaction: { filePathsIncluded: false, privatePathsIncluded: false }
+    });
+    expect(evidence.eventChain.finalHash).toMatch(/^[a-f0-9]{64}$/);
+    const serialized = JSON.stringify(evidence);
+    expect(serialized).not.toContain(repository);
+    expect(serialized).not.toContain("a.txt");
+    expect(await writeRollbackEvidence(result.metadata)).toBe(result.evidencePath);
+    const occupied = join(metadata.transactionDirectory, "occupied-evidence.json");
+    await writeFile(occupied, "do not replace\n");
+    await expect(writeRollbackEvidence(result.metadata, occupied)).rejects.toThrow(
+      "Refusing to overwrite different rollback evidence"
+    );
+    expect(await readFile(occupied, "utf8")).toBe("do not replace\n");
+    await rm(result.evidencePath);
+    const regenerated = await writeRollbackEvidence(result.metadata);
+    expect(await readFile(regenerated, "utf8")).toBe(evidenceText);
+    const diffPath = join(metadata.transactionDirectory, "after.json");
+    const tamperedDiff = JSON.parse(await readFile(diffPath, "utf8")) as { filesChanged: number };
+    tamperedDiff.filesChanged += 1;
+    await writeFile(diffPath, `${JSON.stringify(tamperedDiff)}\n`);
+    await expect(writeRollbackEvidence(result.metadata)).rejects.toThrow(
+      "Transaction diff does not match the terminal rollback event."
+    );
+  });
+
+  it("marks workspace proof unavailable when the original repository cannot be inspected", async () => {
+    const repository = await createRepository();
+    const metadata = await runNodeTransaction(
+      repository,
+      `require('node:fs').writeFileSync('file.txt','agent\\n')`
+    );
+    await rm(repository, { recursive: true, force: true });
+    const result = await rollbackTransaction(metadata);
+    expect(result.metadata.status).toBe("ROLLED_BACK");
+    expect(result.originalWorkspaceStatusUnchanged).toBeNull();
+    if (!result.evidencePath) throw new Error(result.evidenceWarning ?? "rollback evidence missing");
+    const evidence = JSON.parse(await readFile(result.evidencePath, "utf8")) as {
+      result: { originalWorkspaceStatusUnchanged: boolean | null };
+      workspaceStatusEvidence: { before: string | null; after: string | null };
+    };
+    expect(evidence.result.originalWorkspaceStatusUnchanged).toBeNull();
+    expect(evidence.workspaceStatusEvidence).toEqual({
+      before: null,
+      after: null,
+      algorithm: "sha256(git-head-nul-status-porcelain-v2-z)"
+    });
   });
 
   it.skipIf(process.platform === "win32")("canonicalizes a symlinked repository invocation path", async () => {

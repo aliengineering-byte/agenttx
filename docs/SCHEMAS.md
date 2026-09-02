@@ -117,3 +117,59 @@ File `kind` is `added`, `modified`, `deleted`, or `renamed`. Binary line counts 
 Risk `level` is `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`. Every score contribution appears in `reasons`.
 
 Secret finding values are always the literal `[REDACTED]`.
+
+## Rollback evidence
+
+A successful `agenttx rollback` writes `rollback-evidence.json` in the transaction directory and prints its location. If that final atomic write fails, rollback remains complete and the CLI prints an actionable warning; `agenttx evidence <transaction-id>` regenerates the artifact from `after.json` and the terminal event ledger. Evidence export accepts an existing byte-identical artifact but refuses to replace different content, including at an explicit `--output` path. The artifact is deliberately path-free by default:
+
+```json
+{
+  "schemaVersion": 1,
+  "evidenceType": "agenttx.rollback",
+  "producer": {
+    "repository": "aliengineering-byte/agenttx",
+    "version": "0.1.0",
+    "capability": "repository-transaction-rollback",
+    "documentation": "https://github.com/aliengineering-byte/agenttx/blob/main/docs/SCHEMAS.md#rollback-evidence"
+  },
+  "transaction": {
+    "transactionId": "atx_20260808_153522_a81f",
+    "baselineCommit": "<git-object-id>",
+    "baseHead": "<git-object-id>",
+    "state": "ROLLED_BACK",
+    "completedAt": "2026-08-08T15:43:01.000Z"
+  },
+  "result": {
+    "filesDiscarded": 2,
+    "additionsDiscarded": 12,
+    "deletionsDiscarded": 3,
+    "binaryFilesDiscarded": 0,
+    "originalWorkspaceStatusUnchanged": true
+  },
+  "workspaceStatusEvidence": {
+    "algorithm": "sha256(git-head-nul-status-porcelain-v2-z)",
+    "before": "<sha256>",
+    "after": "<sha256>"
+  },
+  "eventChain": {
+    "algorithm": "sha256",
+    "events": 7,
+    "finalHash": "<sha256>"
+  },
+  "artifacts": {
+    "transactionDiff": {
+      "algorithm": "sha256(JSON.stringify(diff))",
+      "sha256": "<sha256>"
+    }
+  },
+  "redaction": {
+    "filePathsIncluded": false,
+    "commandArgumentsIncluded": false,
+    "privatePathsIncluded": false,
+    "secrets": "redacted"
+  },
+  "limitations": ["..."]
+}
+```
+
+`originalWorkspaceStatusUnchanged` compares hashes of Git `HEAD` plus porcelain-v2 status immediately before and after isolated-workspace removal. It is `null` when the original repository cannot be inspected. It does not cover ignored files or external systems; AgentTX remains repository isolation, not an operating-system security boundary. The terminal event binds the path-free diff digest and workspace-status digests into the validated event chain without copying commands, file paths, or user content into the exported evidence.

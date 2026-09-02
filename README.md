@@ -43,6 +43,7 @@ agenttx rollback
 ```
 
 `agenttx commit` applies files to your working tree; it does **not** create or stage a Git commit.
+`agenttx rollback` also writes a redacted `rollback-evidence.json` with discarded-change counts, the terminal event-chain hash, and before/after digests proving whether the Git-visible original workspace status stayed unchanged.
 
 Try the real, deterministic demo with no model, credentials, remote, or network write:
 
@@ -76,9 +77,10 @@ AgentTX captures the repository baseline, builds an independent local clone, ove
 | `agenttx inspect [id] [--json]` | Show changes, side effects, risk, and checks |
 | `agenttx verify [id] [--run]` | Discover checks; run them only with `--run` |
 | `agenttx commit [id]` | Accept transaction files after conflict checks |
-| `agenttx rollback [id]` | Discard the isolated transaction |
+| `agenttx rollback [id]` | Discard the isolated transaction and write rollback evidence |
 | `agenttx history [--json]` | List local transaction history |
 | `agenttx replay <id> [--json]` | Read recorded events; it does not re-execute |
+| `agenttx evidence <id> [--output path]` | Regenerate redacted rollback evidence from the terminal ledger |
 | `agenttx report [id] --html` | Write a standalone redacted HTML report |
 | `agenttx doctor [--json]` | Check Node, Git, repository state, storage, and agent CLIs |
 | `agenttx demo [--keep]` | Run the offline seven-file demo |
@@ -100,6 +102,8 @@ agenttx run -- node scripts/my-local-agent.mjs
 Named adapters identify common CLIs; they do not depend on private agent hooks. Availability and interactive behavior still depend on the installed tool and platform. See [agent compatibility](docs/AGENT_COMPATIBILITY.md) for the distinction between generic support and explicit smoke tests.
 
 Using AgentTX with Claude Code, Codex, Gemini CLI, OpenCode, or another coding agent? [Open a compatibility report](https://github.com/aliengineering-byte/agenttx/issues/new?template=agent-compatibility.yml). Real reports determine which agent-specific workflows receive deeper testing.
+
+Found another problem or workflow gap? Open a [sanitized bug report](https://github.com/aliengineering-byte/agenttx/issues/new?template=bug.yml) or a [focused feature request](https://github.com/aliengineering-byte/agenttx/issues/new?template=feature.yml).
 
 ## Safety model
 

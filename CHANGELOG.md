@@ -2,6 +2,13 @@
 
 All notable changes to AgentTX are documented here. The project follows Semantic Versioning.
 
+## Unreleased
+
+### Added
+
+- Successful rollback now emits path-free, hash-linked evidence that proves whether the Git-visible original workspace status changed during rollback.
+- `agenttx evidence <transaction-id>` regenerates rollback evidence from the terminal ledger when the initial atomic artifact write is unavailable.
+
 ## [0.1.0] - 2026-08-08
 
 ### Added

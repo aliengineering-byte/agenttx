@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { EventLedger } from "./ledger.js";
+import { writeRollbackEvidence } from "./evidence.js";
 import { assertContained, assertSafeRelativePath, copyEntry, fingerprintPath, fingerprintsEqual, pathExists, toPosixPath, writeJsonAtomic } from "./fs.js";
 import { findRepository, runGit, splitNull } from "./git.js";
 import { redactText, sanitizeCommand } from "./redaction.js";
@@ -61,6 +63,22 @@ async function captureBefore(repositoryRoot: string, head: string): Promise<Befo
     status: status.stdout.split(/\r?\n/).filter(Boolean),
     files
   };
+}
+
+async function workspaceStatusDigest(repositoryRoot: string): Promise<string | null> {
+  try {
+    const [head, status] = await Promise.all([
+      runGit(repositoryRoot, ["rev-parse", "HEAD"]),
+      runGit(repositoryRoot, ["status", "--porcelain=v2", "-z", "--untracked-files=all"])
+    ]);
+    return createHash("sha256")
+      .update(head.stdout.trim())
+      .update("\0")
+      .update(status.stdout)
+      .digest("hex");
+  } catch {
+    return null;
+  }
 }
 
 async function validateRepository(repositoryRoot: string): Promise<string> {
@@ -482,11 +500,16 @@ export async function commitTransaction(metadata: TransactionMetadata): Promise<
 export async function rollbackTransaction(metadata: TransactionMetadata): Promise<{
   metadata: TransactionMetadata;
   diff: DiffSummary;
+  evidencePath: string | null;
+  evidenceWarning: string | null;
+  originalWorkspaceStatusUnchanged: boolean | null;
 }> {
   if (!["CREATED", "REVIEW", "FAILED", "ABORTED"].includes(metadata.status)) {
     throw new Error(`Transaction ${metadata.transactionId} is ${metadata.status} and cannot be rolled back.`);
   }
   const diff = await inspectDiff(metadata);
+  await writeJsonAtomic(transactionPath(metadata, "after.json"), diff);
+  const workspaceStatusBefore = await workspaceStatusDigest(metadata.repositoryRoot);
   const ledger = new EventLedger(metadata.transactionDirectory);
   await ledger.append("rollback.started", { filesChanged: diff.filesChanged });
   try {
@@ -498,11 +521,32 @@ export async function rollbackTransaction(metadata: TransactionMetadata): Promis
   metadata = await transitionTransaction(metadata, "ROLLED_BACK", {
     completedAt: new Date().toISOString()
   });
+  const workspaceStatusAfter = await workspaceStatusDigest(metadata.repositoryRoot);
+  const originalWorkspaceStatusUnchanged =
+    workspaceStatusBefore === null || workspaceStatusAfter === null
+      ? null
+      : workspaceStatusBefore === workspaceStatusAfter;
   await ledger.append("rollback.completed", {
     filesDiscarded: diff.filesChanged,
-    originalWorkspaceChanged: false
+    diffSha256: createHash("sha256").update(JSON.stringify(diff)).digest("hex"),
+    workspaceStatusBefore,
+    workspaceStatusAfter,
+    originalWorkspaceStatusUnchanged
   });
-  return { metadata, diff };
+  let evidencePath: string | null = null;
+  let evidenceWarning: string | null = null;
+  try {
+    evidencePath = await writeRollbackEvidence(metadata);
+  } catch (error) {
+    evidenceWarning = redactText((error as Error).message);
+  }
+  return {
+    metadata,
+    diff,
+    evidencePath,
+    evidenceWarning,
+    originalWorkspaceStatusUnchanged
+  };
 }
 
 export function processIsRunning(pid: number | undefined): boolean {
