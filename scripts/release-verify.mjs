@@ -66,6 +66,11 @@ async function initializeRepository(root) {
 }
 
 const project = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const manifest = JSON.parse(await readFile(join(project, "package.json"), "utf8"));
+if (manifest.name !== "agenttx" || typeof manifest.version !== "string") {
+  throw new Error("Unexpected package identity in package.json");
+}
+const expectedVersion = manifest.version;
 const temporary = await mkdtemp(join(tmpdir(), "agenttx-release-verify-"));
 const packDirectory = join(temporary, "pack");
 const prefix = join(temporary, "prefix");
@@ -82,7 +87,7 @@ try {
   } else {
     await execute(packageManager, ["pack", "--pack-destination", packDirectory], { cwd: project });
   }
-  const tarball = join(packDirectory, "agenttx-0.1.0.tgz");
+  const tarball = join(packDirectory, `${manifest.name}-${expectedVersion}.tgz`);
   await access(tarball);
   if (hasNpm) {
     await execute(packageManager, ["install", tarball, "--prefix", prefix]);
@@ -93,7 +98,7 @@ try {
   const shebang = (await readFile(cli, "utf8")).split("\n")[0];
   if (shebang !== "#!/usr/bin/env node") throw new Error(`Unexpected CLI shebang: ${shebang}`);
   const version = (await execute(process.execPath, [cli, "--version"], { capture: true })).stdout.trim();
-  if (version !== "0.1.0") throw new Error(`Unexpected installed version: ${version}`);
+  if (version !== expectedVersion) throw new Error(`Unexpected installed version: ${version}`);
 
   await initializeRepository(repository);
   const env = { ...process.env, AGENTTX_HOME: transactionHome };

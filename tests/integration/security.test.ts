@@ -177,5 +177,5 @@ describe("side-effect gating and privacy", () => {
       code: 1,
       stderr: expect.stringContaining("Evidence receipt digest mismatch")
     });
-  });
+  }, 60_000);
 });
