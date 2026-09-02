@@ -123,9 +123,9 @@ jobs:
               re.compile(rb"(?:ghp_|github_pat_|npm_)[A-Za-z0-9_]{30,}"),
               re.compile(rb"pypi-[A-Za-z0-9_-]{20,}"),
               re.compile(rb"AKIA[0-9A-Z]{16}"),
-              re.compile(rb"/home/runner/"),
-              re.compile(rb"/Users/[^/\s]+/"),
-              re.compile(rb"[A-Za-z]:\\\\Users\\\\[^\\\s]+\\\\"),
+              re.compile(rb"/" + rb"home/" + rb"runner/"),
+              re.compile(rb"/" + rb"Users/" + rb"[^/\s]+/"),
+              re.compile(rb"[A-Za-z]:" + rb"\\\\" + rb"Users\\\\" + rb"[^\\\s]+\\\\"),
           ]
           for member in members:
               name = member.name
