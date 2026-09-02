@@ -154,3 +154,75 @@ export interface TransactionInspection {
   eventCount: number;
   commandCount: number;
 }
+
+export interface RollbackReceipt {
+  schemaVersion: typeof SCHEMA_VERSION;
+  evidenceType: "agenttx.rollback";
+  producer: {
+    repository: "aliengineering-byte/agenttx";
+    version: string;
+    capability: "repository-transaction-rollback";
+    documentation: string;
+  };
+  transaction: {
+    transactionId: string;
+    baselineCommit: string;
+    baseHead: string;
+    state: "ROLLED_BACK";
+    completedAt: string;
+  };
+  result: {
+    filesDiscarded: number;
+    additionsDiscarded: number;
+    deletionsDiscarded: number;
+    binaryFilesDiscarded: number;
+    originalWorkspaceStatusUnchanged: boolean | null;
+  };
+  workspaceStatusEvidence: {
+    algorithm: "sha256(agenttx-git-visible-content-v1)";
+    before: string | null;
+    after: string | null;
+  };
+  eventChain: {
+    algorithm: "sha256(JSON.stringify(event))";
+    events: number;
+    finalHash: string;
+    terminalEvent: Omit<TransactionEvent, "hash">;
+  };
+  artifacts: {
+    transactionDiff: {
+      algorithm: "sha256(JSON.stringify(diff))";
+      sha256: string;
+    };
+    transactionMetadata: {
+      algorithm: "sha256(agenttx-canonical-json-v1)";
+      sha256: string;
+    };
+  };
+  redaction: {
+    filePathsIncluded: false;
+    commandArgumentsIncluded: false;
+    privatePathsIncluded: false;
+    secrets: "redacted";
+  };
+  limitations: string[];
+}
+
+export interface RollbackEvidence {
+  receipt: RollbackReceipt;
+  integrity: {
+    algorithm: "sha256";
+    canonicalization: "agenttx-canonical-json-v1";
+    scope: "receipt";
+    authentication: "none";
+    digest: string;
+  };
+}
+
+export interface EvidenceVerification {
+  valid: true;
+  evidenceType: "agenttx.rollback";
+  transactionId: string;
+  digest: string;
+  authentication: "none";
+}

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { resolveAdapter } from "./adapters/agent.js";
 import { runDoctor, renderDoctor } from "./cli/doctor.js";
+import { verifyRollbackEvidenceFile, writeRollbackEvidence } from "./core/evidence.js";
 import { inspectTransaction } from "./core/inspection.js";
 import { EventLedger } from "./core/ledger.js";
 import { redactText } from "./core/redaction.js";
@@ -30,6 +31,7 @@ import {
   renderTransactionReport,
   renderVerification
 } from "./reporters/terminal.js";
+import { VERSION } from "./version.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = fileURLToPath(import.meta.url);
@@ -62,7 +64,7 @@ function flagValue(args: readonly string[], flag: string): string | undefined {
 }
 
 function help(): string {
-  return `AgentTX 0.1.0 — Make AI agents undoable.
+  return `AgentTX ${VERSION} — Make AI agents undoable.
 
 Usage:
   agenttx run [--allow-external] [--] <command...>
@@ -74,6 +76,8 @@ Usage:
   agenttx rollback [transaction-id]
   agenttx history [--json]
   agenttx replay <transaction-id> [--json]
+  agenttx evidence <transaction-id> [--output path]
+  agenttx verify-evidence <file>
   agenttx report [transaction-id] --html [--output path]
   agenttx doctor [--json]
   agenttx demo [--keep]
@@ -167,7 +171,21 @@ async function handleRollback(args: string[]): Promise<void> {
   const result = await rollbackTransaction(metadata);
   print(`Transaction ${result.metadata.transactionId} rolled back.\n`);
   print(`Discarded ${result.diff.filesChanged} file change${result.diff.filesChanged === 1 ? "" : "s"}.`);
-  print("Original workspace unchanged.");
+  if (result.originalWorkspaceStatusUnchanged === true) {
+    print("Git-visible original workspace status unchanged (digest matched).");
+  } else if (result.originalWorkspaceStatusUnchanged === false) {
+    print("Warning: Git-visible original workspace status changed during rollback; inspect the evidence artifact.");
+  } else {
+    print("Warning: original workspace status could not be verified; inspect the evidence artifact.");
+  }
+  if (result.evidencePath) {
+    print(`Rollback evidence: ${result.evidencePath}`);
+  } else {
+    process.stderr.write(
+      `Rollback completed, but evidence could not be written: ${result.evidenceWarning ?? "unknown error"}\n` +
+      `Regenerate it with: agenttx evidence ${result.metadata.transactionId}\n`
+    );
+  }
 }
 
 async function handleHistory(args: string[]): Promise<void> {
@@ -186,6 +204,23 @@ async function handleReplay(args: string[]): Promise<void> {
   }
   print(`Recorded events for ${id} (review only; V0 does not deterministically re-execute):`);
   for (const event of events) print(`  ${String(event.seq).padStart(3)}  ${event.timestamp}  ${event.type}`);
+}
+
+async function handleEvidence(args: string[]): Promise<void> {
+  const id = positional(args)[0];
+  if (!id) throw new Error("agenttx evidence requires a transaction ID.");
+  const metadata = await resolveTransaction(id, process.cwd());
+  const path = await writeRollbackEvidence(metadata, flagValue(args, "--output"));
+  print(`Rollback evidence written to ${path}`);
+}
+
+async function handleVerifyEvidence(args: string[]): Promise<void> {
+  const path = positional(args)[0];
+  if (!path) throw new Error("agenttx verify-evidence requires an evidence file.");
+  const verification = await verifyRollbackEvidenceFile(path);
+  print(`Evidence integrity verified for ${verification.transactionId}.`);
+  print(`Receipt SHA-256: ${verification.digest}`);
+  print("Authentication: none — this is unsigned, recomputable integrity, not authentication.");
 }
 
 async function handleReport(args: string[]): Promise<void> {
@@ -250,6 +285,10 @@ async function main(): Promise<void> {
     process.exitCode = await runShim(transactionId, tool, executable, args.slice(separator + 1));
     return;
   }
+  if (command === "verify-evidence") {
+    await handleVerifyEvidence(args);
+    return;
+  }
   const recovered = await recoverInterruptedTransactions();
   if (recovered.length && !hasFlag(args, "--json")) {
     for (const item of recovered) {
@@ -266,11 +305,12 @@ async function main(): Promise<void> {
     case "rollback": await handleRollback(args); break;
     case "history": await handleHistory(args); break;
     case "replay": await handleReplay(args); break;
+    case "evidence": await handleEvidence(args); break;
     case "report": await handleReport(args); break;
     case "doctor": await handleDoctor(args); break;
     case "demo": await handleDemo(args); break;
     case "--version":
-    case "-v": print("0.1.0"); break;
+    case "-v": print(VERSION); break;
     case "help":
     case "--help":
     case "-h": print(help()); break;

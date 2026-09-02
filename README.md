@@ -43,6 +43,7 @@ agenttx rollback
 ```
 
 `agenttx commit` applies files to your working tree; it does **not** create or stage a Git commit.
+`agenttx rollback` also writes a redacted `rollback-evidence.json` with discarded-change counts, a bound terminal event, and content-sensitive before/after digests recording whether the Git-visible original workspace stayed unchanged. Verify its unsigned integrity offline with `agenttx verify-evidence <file>`.
 
 Try the real, deterministic demo with no model, credentials, remote, or network write:
 
@@ -54,7 +55,7 @@ agenttx demo
 
 AgentTX runs the child command inside an independent local Git clone, from the equivalent repository directory. Your original working tree stays available and unchanged until you explicitly accept the transaction. After the child exits, inspect its diff, verification results, detected side effects, and risk; then commit or roll back.
 
-> **Security boundary:** AgentTX v0.1.0 isolates supported repository changes, not the operating system. Child processes retain your normal user permissions, and external-action detection is heuristic. Read the [security model](docs/SECURITY_MODEL.md).
+> **Security boundary:** AgentTX v0.2.0 isolates supported repository changes, not the operating system. Child processes retain your normal user permissions, and external-action detection is heuristic. Read the [security model](docs/SECURITY_MODEL.md).
 
 ## Why AgentTX?
 
@@ -76,9 +77,11 @@ AgentTX captures the repository baseline, builds an independent local clone, ove
 | `agenttx inspect [id] [--json]` | Show changes, side effects, risk, and checks |
 | `agenttx verify [id] [--run]` | Discover checks; run them only with `--run` |
 | `agenttx commit [id]` | Accept transaction files after conflict checks |
-| `agenttx rollback [id]` | Discard the isolated transaction |
+| `agenttx rollback [id]` | Discard the isolated transaction and write rollback evidence |
 | `agenttx history [--json]` | List local transaction history |
 | `agenttx replay <id> [--json]` | Read recorded events; it does not re-execute |
+| `agenttx evidence <id> [--output path]` | Regenerate redacted rollback evidence from the terminal ledger |
+| `agenttx verify-evidence <file>` | Offline-check receipt integrity and derivable invariants; it does not authenticate the artifact |
 | `agenttx report [id] --html` | Write a standalone redacted HTML report |
 | `agenttx doctor [--json]` | Check Node, Git, repository state, storage, and agent CLIs |
 | `agenttx demo [--keep]` | Run the offline seven-file demo |
@@ -101,6 +104,8 @@ Named adapters identify common CLIs; they do not depend on private agent hooks. 
 
 Using AgentTX with Claude Code, Codex, Gemini CLI, OpenCode, or another coding agent? [Open a compatibility report](https://github.com/aliengineering-byte/agenttx/issues/new?template=agent-compatibility.yml). Real reports determine which agent-specific workflows receive deeper testing.
 
+Found another problem or workflow gap? Open a [sanitized bug report](https://github.com/aliengineering-byte/agenttx/issues/new?template=bug.yml) or a [focused feature request](https://github.com/aliengineering-byte/agenttx/issues/new?template=feature.yml).
+
 ## Safety model
 
 AgentTX gives a strong, narrow repository guarantee: before acceptance, rollback removes only the isolated transaction workspace; acceptance refuses overlapping changes in the original repository and restores from a recovery backup if file application fails.
@@ -108,6 +113,8 @@ AgentTX gives a strong, narrow repository guarantee: before acceptance, rollback
 AgentTX is **not an OS security boundary**. The child retains your normal user permissions and can reach files outside the transaction repository. Selected external commands are detected and gated through top-level matching and best-effort `PATH` shims, which absolute binaries, renamed tools, libraries, in-process network calls, or other routes can bypass. `--allow-external` permits detected actions but does not make them reversible.
 
 No telemetry, account, API key, Docker daemon, or cloud service is required. AgentTX does not upload code, paths, prompts, commands, diffs, or transaction metadata.
+
+Rollback receipts are unsigned and recomputable. Their outer hash detects accidental or partial modification, while the offline verifier also checks the bound terminal event, metadata/diff references, and derived workspace result. It is integrity checking, not authentication against someone able to rewrite the complete local receipt and ledger.
 
 Read [SECURITY.md](SECURITY.md), [the exact security model](docs/SECURITY_MODEL.md), and [the threat model](docs/THREAT_MODEL.md) before relying on AgentTX around untrusted code.
 

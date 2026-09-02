@@ -1,6 +1,6 @@
 # Dependency and license record
 
-AgentTX v0.1.0 has **zero runtime dependencies**.
+AgentTX v0.2.0 has **zero runtime dependencies**.
 
 The release environment resolved these direct development dependencies from `package-lock.json`:
 

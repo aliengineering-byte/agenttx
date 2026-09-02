@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -10,7 +10,7 @@ import { EventLedger } from "../../src/core/ledger.js";
 import { generateHtmlReport } from "../../src/reporters/html.js";
 import { renderTransactionReport } from "../../src/reporters/terminal.js";
 import type { CommandSpec } from "../../src/core/types.js";
-import { builtCli, createRepository, isolatedHome } from "../helpers.js";
+import { builtCli, createRepository, isolatedHome, runNodeTransaction } from "../helpers.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -128,4 +128,54 @@ describe("side-effect gating and privacy", () => {
     const value = JSON.parse(result.stdout) as { schemaVersion: number; transactionId: string };
     expect(value).toMatchObject({ schemaVersion: 1, transactionId: created.transactionId });
   });
+
+  it("reports rollback proof and regenerates evidence from the terminal ledger", async () => {
+    const repository = await createRepository();
+    const metadata = await runNodeTransaction(
+      repository,
+      `require('node:fs').writeFileSync('file.txt','agent\\n')`
+    );
+    const rollback = await execFileAsync(
+      process.execPath,
+      [builtCli, "rollback", metadata.transactionId],
+      { cwd: repository, env: process.env, encoding: "utf8", windowsHide: true }
+    );
+    expect(rollback.stdout).toContain("Git-visible original workspace status unchanged (digest matched).");
+    expect(rollback.stdout).toContain("Rollback evidence:");
+    const evidencePath = join(metadata.transactionDirectory, "rollback-evidence.json");
+    await rm(evidencePath);
+    const regenerated = await execFileAsync(
+      process.execPath,
+      [builtCli, "evidence", metadata.transactionId],
+      { cwd: repository, env: process.env, encoding: "utf8", windowsHide: true }
+    );
+    expect(regenerated.stdout).toContain("Rollback evidence written to");
+    const evidence = JSON.parse(await readFile(evidencePath, "utf8")) as {
+      receipt: { evidenceType: string; transaction: { state: string }; result: { filesDiscarded: number } };
+    };
+    expect(evidence.receipt).toMatchObject({
+      evidenceType: "agenttx.rollback",
+      transaction: { state: "ROLLED_BACK" }
+    });
+    const verified = await execFileAsync(
+      process.execPath,
+      [builtCli, "verify-evidence", evidencePath],
+      { cwd: repository, env: process.env, encoding: "utf8", windowsHide: true }
+    );
+    expect(verified.stdout).toContain("Evidence integrity verified");
+    expect(verified.stdout).toContain("unsigned, recomputable integrity, not authentication");
+
+    evidence.receipt.result.filesDiscarded += 1;
+    await writeFile(evidencePath, `${JSON.stringify(evidence)}\n`);
+    await expect(
+      execFileAsync(
+        process.execPath,
+        [builtCli, "verify-evidence", evidencePath],
+        { cwd: repository, env: process.env, encoding: "utf8", windowsHide: true }
+      )
+    ).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining("Evidence receipt digest mismatch")
+    });
+  }, 60_000);
 });

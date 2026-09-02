@@ -7,6 +7,9 @@ export type {
   FileFingerprint,
   RiskAssessment,
   RiskLevel,
+  RollbackEvidence,
+  RollbackReceipt,
+  EvidenceVerification,
   SideEffectFinding,
   TransactionEvent,
   TransactionInspection,
@@ -16,7 +19,16 @@ export type {
   VerificationReport
 } from "./core/types.js";
 export { EventLedger } from "./core/ledger.js";
+export {
+  buildRollbackEvidence,
+  canonicalSha256,
+  deriveWorkspaceStatusUnchanged,
+  verifyRollbackEvidence,
+  verifyRollbackEvidenceFile,
+  writeRollbackEvidence
+} from "./core/evidence.js";
 export { detectSideEffect } from "./detectors/side-effects.js";
 export { inspectTransaction } from "./core/inspection.js";
 export { assessRisk } from "./core/risk.js";
 export { createTransaction, commitTransaction, rollbackTransaction } from "./core/workspace.js";
+export { VERSION } from "./version.js";
