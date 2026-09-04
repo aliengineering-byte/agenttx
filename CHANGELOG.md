@@ -6,6 +6,13 @@ All notable changes to AgentTX are documented here. The project follows Semantic
 
 ### Added
 
+- `agenttx proof -- <command...>` adds bounded, argv-first proof-carrying transactions with explicit required/optional validators, commit-on-success, rollback-on-failure, dry-run planning, privacy modes, and no-clobber output.
+- Every proof pack contains a canonical `proof.json`, deterministic JavaScript-free `proof.html`, exact-argv `reproduce.md`, and bound related-evidence copies.
+- `agenttx verify-proof` fails closed on receipt, derived-verdict, related-evidence, Proof Card, and reproduction tampering.
+- A deterministic bad-agent/good-agent demonstration proves test-weakening rejection and completes without a model API.
+- The root `action.yml` provides the least-privilege AgentTX Proof Verifier Action, with Job Summary output and paths suitable for immutable artifact upload.
+- `agenttx init --github` creates a minimal proof workflow/config without overwriting, pushing, opening a PR, or changing repository settings.
+- `agenttx feedback` displays the only fields included in a voluntary prefilled issue URL and never uploads or opens a browser.
 - Successful rollback now emits path-free, hash-linked evidence recording whether the Git-visible original workspace status changed during rollback.
 - `agenttx evidence <transaction-id>` regenerates rollback evidence from the terminal ledger when the initial atomic artifact write is unavailable.
 - `agenttx verify-evidence <file>` checks the canonical outer receipt digest and every offline-derivable invariant without claiming authentication.
@@ -13,7 +20,7 @@ All notable changes to AgentTX are documented here. The project follows Semantic
 
 ### Changed
 
-- Bump the unreleased package identity to `0.2.0`.
+- Bump the unreleased package identity to `0.3.0` for the user-visible Proof Mode and GitHub Action.
 - Pin CI checkout and Node setup actions to reviewed immutable commits.
 
 ## [0.1.0] - 2026-08-08

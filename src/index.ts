@@ -32,3 +32,14 @@ export { inspectTransaction } from "./core/inspection.js";
 export { assessRisk } from "./core/risk.js";
 export { createTransaction, commitTransaction, rollbackTransaction } from "./core/workspace.js";
 export { VERSION } from "./version.js";
+export type {
+  ProofArtifact,
+  ProofConfig,
+  ProofOptions,
+  ProofReceipt,
+  ProofRelatedEvidence,
+  ProofVerification
+} from "./proof/types.js";
+export { renderProofCard, renderReproduction } from "./proof/render.js";
+export { runProof } from "./proof/run.js";
+export { verifyProofArtifact, verifyProofFile } from "./proof/verify.js";

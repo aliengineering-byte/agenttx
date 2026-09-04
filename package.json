@@ -1,7 +1,7 @@
 {
   "name": "agenttx",
-  "version": "0.2.0",
-  "description": "Git-style transactions for AI coding agents. Inspect, commit, or roll back agent changes.",
+  "version": "0.3.0",
+  "description": "Proof-carrying transactions for AI coding agents. Verify, commit, or roll back every change.",
   "type": "module",
   "bin": {
     "agenttx": "./dist/src/cli.js"
@@ -17,6 +17,7 @@
   "files": [
     "dist",
     "scripts/fake-agent.mjs",
+    "scripts/proof-demo.mjs",
     "docs",
     "README.md",
     "LICENSE",
@@ -30,6 +31,8 @@
     "test": "tsc -p tsconfig.build.json && vitest run",
     "test:coverage": "tsc -p tsconfig.build.json && vitest run --coverage",
     "demo": "node dist/src/cli.js demo",
+    "demo:proof": "node scripts/proof-demo.mjs",
+    "gallery:generate": "node scripts/generate-proof-gallery.mjs",
     "demo:keep": "node dist/src/cli.js demo --keep",
     "benchmark": "node dist/benchmarks/workspace.js",
     "benchmark:quick": "node dist/benchmarks/workspace.js 100",

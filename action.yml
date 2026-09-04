@@ -1,0 +1,28 @@
+name: AgentTX Proof Verifier
+description: Verify an AgentTX proof bundle, render its Proof Card, and fail closed on tampering.
+author: aliengineering-byte
+branding:
+  icon: shield
+  color: purple
+inputs:
+  proof-json:
+    description: Path to proof.json, relative to the checked-out repository.
+    required: true
+  render-card:
+    description: Render proof.html from a valid receipt when it is missing.
+    required: false
+    default: "true"
+outputs:
+  verdict:
+    description: Derived proof verdict.
+  receipt-digest:
+    description: SHA-256 digest of the canonical proof receipt.
+  proof-json-path:
+    description: Resolved proof.json path.
+  proof-card-path:
+    description: Resolved proof.html path.
+  transaction-state:
+    description: Terminal AgentTX transaction state.
+runs:
+  using: node24
+  main: action/index.js
