@@ -3,14 +3,18 @@ name: Publish AgentTX to npm
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: npm-agenttx-${{ github.event.release.tag_name }}
+  group: npm-agenttx-${{ github.event_name == 'release' && github.event.release.tag_name || 'v0.3.0' }}
   cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || 'v0.3.0' }}
 
 jobs:
   verify-and-publish:
@@ -19,14 +23,14 @@ jobs:
     timeout-minutes: 30
     environment:
       name: npm
-      url: https://www.npmjs.com/package/agenttx/v/${{ github.event.release.tag_name }}
+      url: https://www.npmjs.com/package/agenttx/v/0.3.0
     permissions:
       contents: write
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -37,12 +41,11 @@ jobs:
       - run: npm install --global npm@11.9.0
       - name: Validate immutable release identity
         shell: bash
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           test "$(git cat-file -t "refs/tags/$RELEASE_TAG")" = tag
           test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "354225e8e5521631c8eb81bef6667aac923cb6d7"
           version="$(node -p "require('./package.json').version")"
           test "$RELEASE_TAG" = "v$version"
           test "$version" = "0.3.0"
@@ -82,17 +85,21 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          download="$(mktemp -d)"
           for asset in agenttx-0.3.0.tgz agenttx-0.3.0.sha256; do
             if grep -Fxq "$asset" <<<"$existing"; then
-              echo "Refusing to replace immutable release asset $asset" >&2
-              exit 1
+              gh release download "$RELEASE_TAG" --dir "$download" --pattern "$asset"
+              cmp --silent ".artifacts/$asset" "$download/$asset" || {
+                echo "Existing immutable release asset differs: $asset" >&2
+                exit 1
+              }
+            else
+              gh release upload "$RELEASE_TAG" ".artifacts/$asset"
             fi
           done
-          gh release upload "$RELEASE_TAG" .artifacts/agenttx-0.3.0.tgz .artifacts/agenttx-0.3.0.sha256
       - name: Publish through npm Trusted Publishing
         run: npm publish .artifacts/agenttx-0.3.0.tgz --access public --provenance
       - name: Verify the public package and proof path
