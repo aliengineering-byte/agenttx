@@ -1,0 +1,56 @@
+name: Proof Gallery
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proof-gallery
+  cancel-in-progress: false
+
+jobs:
+  generate-and-deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: npm run build
+      - name: Install exact released evidence producers
+        run: |
+          npm install --global --ignore-scripts resilireplay@0.7.1
+          python -m pip install --disable-pip-version-check phaseprobe==0.3.0
+      - run: npm run gallery:generate -- --output gallery-site
+      - name: Generate aggregate public adoption snapshot without telemetry
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/public-adoption-snapshot.mjs gallery-site/adoption.json
+      - name: Enforce the exact three-case gallery
+        run: |
+          test "$(grep -c '<article>' gallery-site/index.html)" -eq 3
+          test "$(find gallery-site -name proof.json -type f | wc -l)" -eq 3
+          for proof in gallery-site/*/proof.json; do node dist/src/cli.js verify-proof "$proof"; done
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: gallery-site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

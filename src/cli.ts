@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +10,7 @@ import { runDoctor, renderDoctor } from "./cli/doctor.js";
 import { verifyRollbackEvidenceFile, writeRollbackEvidence } from "./core/evidence.js";
 import { inspectTransaction } from "./core/inspection.js";
 import { EventLedger } from "./core/ledger.js";
-import { redactText } from "./core/redaction.js";
+import { redactText, sanitizeCommand } from "./core/redaction.js";
 import { runTransaction } from "./core/runner.js";
 import { runShim } from "./core/shims.js";
 import { listTransactions, resolveTransaction } from "./core/store.js";
@@ -32,6 +32,14 @@ import {
   renderVerification
 } from "./reporters/terminal.js";
 import { VERSION } from "./version.js";
+import { findRepository } from "./core/git.js";
+import { pathExists } from "./core/fs.js";
+import { loadProofConfig, validateArgv } from "./proof/config.js";
+import { badgeSnippet, initializeGitHub } from "./proof/init.js";
+import { renderProofCard } from "./proof/render.js";
+import { runProof } from "./proof/run.js";
+import type { ProofArtifact, ProofOptions, ProofPrivacy, ProofValidatorConfig } from "./proof/types.js";
+import { verifyProofArtifact, verifyProofFile } from "./proof/verify.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = fileURLToPath(import.meta.url);
@@ -68,6 +76,11 @@ function help(): string {
 
 Usage:
   agenttx run [--allow-external] [--] <command...>
+  agenttx proof [options] -- <command...>
+  agenttx verify-proof <proof.json>
+  agenttx render-proof <proof.json> [--output proof.html]
+  agenttx init --github [--badge owner/repository]
+  agenttx feedback <proof.json>
   agenttx status [transaction-id] [--json]
   agenttx diff [transaction-id] [--stat|--full]
   agenttx inspect [transaction-id] [--json]
@@ -84,6 +97,189 @@ Usage:
 
 External writes detected by top-level matching or PATH shims are blocked by default.
 Detection is heuristic; AgentTX V0 is not an OS security sandbox.`;
+}
+
+interface ParsedProof {
+  options: ProofOptions;
+  json: boolean;
+}
+
+function boundedInteger(value: string | undefined, name: string, minimum: number, maximum: number): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
+  }
+  return parsed;
+}
+
+function inlineValidator(value: string | undefined, required: boolean, index: number): ProofValidatorConfig {
+  if (!value) throw new Error("Validator options require a JSON argv array.");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("Validator must be a JSON argv array, for example '[\"npm\",\"test\"]'.");
+  }
+  return { id: `${required ? "required" : "optional"}-${index}`, argv: validateArgv(parsed, "validator"), required };
+}
+
+async function parseProof(args: string[]): Promise<ParsedProof> {
+  const separator = args.indexOf("--");
+  if (separator < 0) throw new Error("agenttx proof requires -- before the command.");
+  const flags = args.slice(0, separator);
+  const argv = validateArgv(args.slice(separator + 1), "proof command");
+  let configPath: string | undefined;
+  let outputDirectory: string | undefined;
+  let privacy: ProofPrivacy = "paths";
+  let timeoutMs = 120_000;
+  let maxOutputBytes = 1024 * 1024;
+  let maxEvidenceBytes = 16 * 1024 * 1024;
+  let shell = false;
+  let allowExternal = false;
+  let commitOnSuccess = true;
+  let rollbackOnFailure = true;
+  let dryRun = false;
+  let json = false;
+  const inline: ProofValidatorConfig[] = [];
+  for (let index = 0; index < flags.length; index += 1) {
+    const flag = flags[index];
+    if (flag === "--config") configPath = flags[++index];
+    else if (flag === "--output" || flag === "--output-dir") outputDirectory = flags[++index];
+    else if (flag === "--privacy") {
+      const value = flags[++index];
+      if (value !== "paths" && value !== "minimal") throw new Error("--privacy must be paths or minimal.");
+      privacy = value;
+    } else if (flag === "--timeout-ms") timeoutMs = boundedInteger(flags[++index], flag, 100, 3_600_000);
+    else if (flag === "--max-output-bytes") maxOutputBytes = boundedInteger(flags[++index], flag, 1024, 64 * 1024 * 1024);
+    else if (flag === "--max-evidence-bytes") maxEvidenceBytes = boundedInteger(flags[++index], flag, 1024, 256 * 1024 * 1024);
+    else if (flag === "--validator") inline.push(inlineValidator(flags[++index], true, inline.length + 1));
+    else if (flag === "--optional-validator") inline.push(inlineValidator(flags[++index], false, inline.length + 1));
+    else if (flag === "--shell") shell = true;
+    else if (flag === "--allow-external") allowExternal = true;
+    else if (flag === "--no-commit") commitOnSuccess = false;
+    else if (flag === "--no-rollback") rollbackOnFailure = false;
+    else if (flag === "--dry-run") dryRun = true;
+    else if (flag === "--json") json = true;
+    else throw new Error(`Unknown proof option: ${flag}`);
+  }
+  const repositoryRoot = await findRepository(process.cwd());
+  const config = await loadProofConfig(repositoryRoot, configPath);
+  return {
+    json,
+    options: {
+      command: { command: argv[0] as string, args: argv.slice(1) },
+      ...(outputDirectory ? { outputDirectory } : {}),
+      ...(configPath ? { configPath } : {}),
+      validators: [...(config.validators ?? []), ...inline],
+      relatedEvidence: config.relatedEvidence ?? [],
+      privacy,
+      timeoutMs,
+      maxOutputBytes,
+      maxEvidenceBytes,
+      shell,
+      allowExternal,
+      commitOnSuccess,
+      rollbackOnFailure,
+      dryRun
+    }
+  };
+}
+
+async function handleProof(args: string[]): Promise<void> {
+  const parsed = await parseProof(args);
+  if (parsed.options.dryRun) {
+    const plan = {
+      valid: true,
+      dryRun: true,
+      command: sanitizeCommand(parsed.options.command.command, parsed.options.command.args),
+      validators: parsed.options.validators,
+      relatedEvidence: parsed.options.relatedEvidence,
+      bounds: {
+        timeoutMs: parsed.options.timeoutMs,
+        maxOutputBytes: parsed.options.maxOutputBytes,
+        maxEvidenceBytes: parsed.options.maxEvidenceBytes,
+        maxNesting: 1
+      },
+      shell: parsed.options.shell,
+      allowExternal: parsed.options.allowExternal,
+      commitOnSuccess: parsed.options.commitOnSuccess,
+      rollbackOnFailure: parsed.options.rollbackOnFailure
+    };
+    print(JSON.stringify(plan, null, parsed.json ? 0 : 2));
+    return;
+  }
+  const result = await runProof(process.cwd(), cliPath, parsed.options);
+  if (parsed.json) {
+    print(JSON.stringify({
+      verdict: result.artifact.proof.transaction.verdict,
+      digest: result.artifact.integrity.digest,
+      transactionState: result.artifact.proof.transaction.state,
+      proofJson: result.proofPath,
+      proofCard: result.cardPath,
+      reproduction: result.reproductionPath
+    }));
+  } else {
+    print(`${result.artifact.proof.transaction.verdict}: ${result.artifact.proof.transaction.reason}`);
+    print(`Proof JSON: ${result.proofPath}`);
+    print(`Proof Card: ${result.cardPath}`);
+    print(`Digest: ${result.artifact.integrity.digest}`);
+    print(`Verify: agenttx verify-proof "${result.proofPath}"`);
+  }
+  if (result.artifact.proof.transaction.verdict !== "PASS") process.exitCode = 1;
+}
+
+async function handleVerifyProof(args: string[]): Promise<void> {
+  const path = positional(args)[0];
+  if (!path) throw new Error("agenttx verify-proof requires proof.json.");
+  const verification = await verifyProofFile(path);
+  if (hasFlag(args, "--json")) print(JSON.stringify(verification));
+  else {
+    print(`Proof verified: ${verification.verdict}`);
+    print(`Receipt SHA-256: ${verification.digest}`);
+    print(`Transaction: ${verification.transactionId}`);
+    print("Proof Card and reproduction record match. Authentication: none.");
+  }
+}
+
+async function handleRenderProof(args: string[]): Promise<void> {
+  const source = positional(args)[0];
+  if (!source) throw new Error("agenttx render-proof requires proof.json.");
+  const artifact = JSON.parse(await readFile(resolve(source), "utf8")) as ProofArtifact;
+  verifyProofArtifact(artifact);
+  const destination = resolve(flagValue(args, "--output") ?? "proof.html");
+  if (await pathExists(destination)) throw new Error(`Refusing to overwrite existing file: ${destination}`);
+  await writeFile(destination, renderProofCard(artifact), { flag: "wx", mode: 0o600 });
+  print(destination);
+}
+
+async function handleInit(args: string[]): Promise<void> {
+  if (!hasFlag(args, "--github")) throw new Error("agenttx init currently requires --github.");
+  const repositoryRoot = await findRepository(process.cwd());
+  const paths = await initializeGitHub(repositoryRoot);
+  for (const path of paths) print(`Created ${path}`);
+  const badge = flagValue(args, "--badge");
+  if (badge) {
+    print("\nOptional workflow badge (not written):");
+    print(badgeSnippet(badge));
+  }
+}
+
+async function handleFeedback(args: string[]): Promise<void> {
+  const path = positional(args)[0];
+  if (!path) throw new Error("agenttx feedback requires proof.json.");
+  const verification = await verifyProofFile(path);
+  const artifact = JSON.parse(await readFile(resolve(path), "utf8")) as ProofArtifact;
+  const included = {
+    agenttxVersion: artifact.proof.agenttxVersion,
+    verdict: verification.verdict,
+    receiptDigest: verification.digest,
+    transactionId: verification.transactionId
+  };
+  print("No data was uploaded. This URL includes exactly:");
+  print(JSON.stringify(included, null, 2));
+  const body = encodeURIComponent(`AgentTX proof feedback\n\n${JSON.stringify(included, null, 2)}`);
+  print(`\nhttps://github.com/aliengineering-byte/agenttx/issues/new?title=Proof%20feedback&body=${body}`);
+  print("The browser was not opened.");
 }
 
 function parseRun(args: string[]): { allowExternal: boolean; command: CommandSpec } {
@@ -289,6 +485,14 @@ async function main(): Promise<void> {
     await handleVerifyEvidence(args);
     return;
   }
+  if (command === "verify-proof") {
+    await handleVerifyProof(args);
+    return;
+  }
+  if (command === "render-proof") {
+    await handleRenderProof(args);
+    return;
+  }
   const recovered = await recoverInterruptedTransactions();
   if (recovered.length && !hasFlag(args, "--json")) {
     for (const item of recovered) {
@@ -297,6 +501,7 @@ async function main(): Promise<void> {
   }
   switch (command) {
     case "run": await handleRun(args); break;
+    case "proof": await handleProof(args); break;
     case "status": await handleStatus(args); break;
     case "diff": await handleDiff(args); break;
     case "inspect": await handleInspect(args); break;
@@ -309,6 +514,8 @@ async function main(): Promise<void> {
     case "report": await handleReport(args); break;
     case "doctor": await handleDoctor(args); break;
     case "demo": await handleDemo(args); break;
+    case "init": await handleInit(args); break;
+    case "feedback": await handleFeedback(args); break;
     case "--version":
     case "-v": print(VERSION); break;
     case "help":

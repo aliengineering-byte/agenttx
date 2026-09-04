@@ -1,6 +1,6 @@
 # Dependency and license record
 
-AgentTX v0.2.0 has **zero runtime dependencies**.
+AgentTX v0.3.0 has **zero runtime dependencies**. The GitHub Action invokes the exact public AgentTX npm verifier at runtime; the installed CLI and generated proof packs remain offline-verifiable.
 
 The release environment resolved these direct development dependencies from `package-lock.json`:
 

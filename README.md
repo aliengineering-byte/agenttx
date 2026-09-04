@@ -1,21 +1,23 @@
 # AgentTX
 
-**Make AI agents undoable.**
+## Every AI change comes with proof.
 
-**Git-style transactions for AI coding agents.**
+Run any coding agent behind one generic command boundary. AgentTX isolates its Git-visible changes, runs your required validators, accepts only a derived success, and emits a machine-verifiable receipt plus a self-contained Proof Card.
 
-Run an agent in an isolated repository transaction. Inspect everything it changed. Commit the good. Roll back the bad.
+```bash
+agenttx proof --validator '["npm","test"]' -- codex exec "fix the failing test without weakening it"
+```
+
+**PASS means the command and every required gate passed. A failed command, validator, or related-evidence check is rejected and rolled back by default.**
+
+[Open Proof Mode](docs/PROOF_MODE.md) · [Run the deterministic bad-agent demo](#proof-mode-demo) · [Verify in GitHub Actions](docs/GITHUB_ACTION.md)
+
+[View the CI-generated three-case Proof Gallery](https://aliengineering-byte.github.io/agenttx/).
 
 [![npm version](https://img.shields.io/npm/v/agenttx?logo=npm)](https://www.npmjs.com/package/agenttx)
 [![CI](https://github.com/aliengineering-byte/agenttx/actions/workflows/ci.yml/badge.svg)](https://github.com/aliengineering-byte/agenttx/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-3fb950.svg)](LICENSE)
 [![Node.js 20+](https://img.shields.io/badge/node-20%2B-339933.svg)](https://nodejs.org/)
-
-![AgentTX real offline demo: an agent changes seven files, AgentTX gates a simulated push, reports high risk, and rolls the transaction back](docs/assets/agenttx-demo.gif)
-
-**Run → Inspect → Commit / Rollback**
-
-[Static demo frame](docs/assets/agenttx-demo.png) · [Plain-text transcript](docs/assets/terminal-demo.txt)
 
 ## Quick start
 
@@ -24,38 +26,42 @@ AgentTX requires Node.js 20+ and Git. Start inside a Git repository with at leas
 ```bash
 npm install --global agenttx
 cd my-project
-agenttx run <coding-agent>
+agenttx proof -- <coding-agent>
 ```
 
-When the agent exits, review the transaction:
+Proof Mode commits repository changes only when the command and every required validator pass. It otherwise rolls the isolated change back. Every terminal result includes `proof.json`, `proof.html`, and `reproduce.md`.
+
+Verify a copied proof pack offline:
 
 ```bash
+agenttx verify-proof path/to/proof.json
+```
+
+Use classic review mode when you want a human decision instead:
+
+```bash
+agenttx run -- <coding-agent>
 agenttx diff
-agenttx inspect
-```
-
-Then accept its file changes—or discard the entire transaction:
-
-```bash
-agenttx commit
-# or
-agenttx rollback
+agenttx commit # or agenttx rollback
 ```
 
 `agenttx commit` applies files to your working tree; it does **not** create or stage a Git commit.
 `agenttx rollback` also writes a redacted `rollback-evidence.json` with discarded-change counts, a bound terminal event, and content-sensitive before/after digests recording whether the Git-visible original workspace stayed unchanged. Verify its unsigned integrity offline with `agenttx verify-evidence <file>`.
 
-Try the real, deterministic demo with no model, credentials, remote, or network write:
+## Proof Mode demo
+
+Try the deterministic proof demonstration with no model, credentials, remote, or network write. A bad agent weakens a protected test, the policy gate rejects it, AgentTX restores the original state, and tampering is rejected. A good agent then fixes the defect while preserving the test and earns a passing proof.
 
 ```bash
-agenttx demo
+npm run build
+npm run demo:proof
 ```
 
 ## The transaction boundary
 
 AgentTX runs the child command inside an independent local Git clone, from the equivalent repository directory. Your original working tree stays available and unchanged until you explicitly accept the transaction. After the child exits, inspect its diff, verification results, detected side effects, and risk; then commit or roll back.
 
-> **Security boundary:** AgentTX v0.2.0 isolates supported repository changes, not the operating system. Child processes retain your normal user permissions, and external-action detection is heuristic. Read the [security model](docs/SECURITY_MODEL.md).
+> **Security boundary:** AgentTX v0.3.0 isolates supported repository changes, not the operating system. Child processes retain your normal user permissions, and external-action detection is heuristic. Read the [security model](docs/SECURITY_MODEL.md).
 
 ## Why AgentTX?
 
@@ -71,6 +77,11 @@ AgentTX captures the repository baseline, builds an independent local clone, ove
 
 | Command | Purpose |
 |---|---|
+| `agenttx proof [options] -- <command...>` | Gate a command, commit or roll back, and generate a verifiable proof pack |
+| `agenttx verify-proof <proof.json>` | Offline-check the receipt, related artifacts, Proof Card, and reproduction record |
+| `agenttx render-proof <proof.json> [--output proof.html]` | Render a valid receipt as a self-contained Proof Card without overwriting files |
+| `agenttx init --github` | Create a minimal proof config and least-privilege workflow without overwriting |
+| `agenttx feedback <proof.json>` | Show safe fields and print a voluntary issue URL without uploading or opening a browser |
 | `agenttx run [--allow-external] [--] <command...>` | Run any command in a new transaction |
 | `agenttx status [id] [--json]` | Show transaction state |
 | `agenttx diff [id] [--stat\|--full]` | Review changed files or the redacted patch |
@@ -86,7 +97,7 @@ AgentTX captures the repository baseline, builds an independent local clone, ove
 | `agenttx doctor [--json]` | Check Node, Git, repository state, storage, and agent CLIs |
 | `agenttx demo [--keep]` | Run the offline seven-file demo |
 
-Machine consumers can use `status --json` and `inspect --json`. Their versioned examples are in [the schema reference](docs/SCHEMAS.md).
+Machine consumers can use `proof --json`, `verify-proof --json`, `status --json`, and `inspect --json`. Their versioned examples are in [the schema reference](docs/SCHEMAS.md).
 
 ## Works around the agent, not instead of it
 
